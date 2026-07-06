@@ -67,8 +67,8 @@ Full tokens in `theme/tokens.css`; living demo in `theme/specimen.html` (open in
   - Decision: fuzzy match is an in-house subsequence scorer (no Fuse.js) — see `src/palette/CommandPalette.tsx`.
 - [x] P0.7 Electron wrapper: electron-vite, loads the same SPA, native file dialogs wired into P0.4 behind an interface, `.pdf` file association, single-instance lock. CI (GitHub Actions): typecheck, lint, unit tests, web build, Electron build (win + mac).
   - Decision: electron-vite emits ESM (`out/main/main.js`, `out/preload/preload.mjs`); Electron 43 runs both. CI's `electron` job runs `electron-vite build` (bundle compile) on win+mac; full electron-builder packaging/signing/notarisation is deferred to P9.3 (`dist:electron` script exists, unused in CI).
-- [ ] P0.8 **Phase done when:** shell runs on web + Electron, theme toggles, palette executes/undoes a command, CI green.
-  - Verified locally on Windows 11 (2026-07-07): `npm run typecheck`, `npm run lint`, `npm test` (3 pass), `npm run build`, `npm run build:electron` all clean; `npx electron .` boots the shell (renderer loads from `file://`, no preload/load errors). Remaining: **push to GitHub so Actions runs** — CI-green cannot be self-verified locally. Every CI step passes here, so it should go green on push.
+- [x] P0.8 **Phase done when:** shell runs on web + Electron, theme toggles, palette executes/undoes a command, CI green.
+  - Verified locally on Windows 11 (2026-07-07): typecheck, lint, tests, web build, Electron build all clean; `npx electron .` boots the shell. **CI green on GitHub** (run 28824950588, commit 6583fbb): `check` + Electron builds on windows-latest and macos-latest all ✓. Phase 0 complete.
 
 ## Phase 1 — PDF: view, organise, annotate, everyday output
 
