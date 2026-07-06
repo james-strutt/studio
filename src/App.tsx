@@ -8,7 +8,7 @@ import { CommandPalette } from "@/palette/CommandPalette";
 import { PdfEditor } from "@/editors/PdfEditor";
 import { ImageEditor } from "@/editors/ImageEditor";
 import { VideoEditor } from "@/editors/VideoEditor";
-import { undo, redo } from "@/commands/history";
+import { dispatch, undo, redo } from "@/commands/history";
 
 const editors = { pdf: PdfEditor, image: ImageEditor, video: VideoEditor };
 
@@ -38,6 +38,16 @@ export function App(): JSX.Element {
       if (mod && e.key.toLowerCase() === "z" && !isTypingTarget(e.target)) {
         e.preventDefault();
         void (e.shiftKey ? redo() : undo());
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "s") {
+        // Save the active editor's document. Only PDF has a save path today;
+        // other editors register their own pdf.save-equivalent later.
+        const editor = useShellStore.getState().activeEditor;
+        if (editor === "pdf") {
+          e.preventDefault();
+          void dispatch("pdf.save", {});
+        }
       }
     };
     window.addEventListener("keydown", onKey);

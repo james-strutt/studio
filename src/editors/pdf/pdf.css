@@ -72,6 +72,13 @@
   margin-left: auto;
 }
 
+.pdf-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px var(--space-1);
+  background: var(--line);
+}
+
 .pdf-body {
   flex: 1;
   min-height: 0;
@@ -352,4 +359,115 @@
   display: grid;
   place-items: center;
   background: var(--surround);
+}
+
+/* ---- merge tray ---- */
+.merge-tray {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.merge-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  background: var(--panel-2);
+  cursor: grab;
+}
+
+.merge-item:active {
+  cursor: grabbing;
+}
+
+.merge-grip {
+  color: var(--ink-3);
+  cursor: grab;
+}
+
+.merge-index {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  min-width: 1.4em;
+  text-align: right;
+}
+
+.merge-kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--r-1);
+  padding: 1px 5px;
+}
+
+.merge-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- crop dialog ---- */
+.crop-stage {
+  position: relative;
+  align-self: center;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: var(--shadow-1);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.crop-canvas {
+  display: block;
+  pointer-events: none;
+}
+
+.crop-rect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  /* dims everything outside the crop region */
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--ink) 45%, transparent);
+  cursor: move;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border: 1px solid #fff;
+  border-radius: var(--r-full);
+}
+
+.crop-nw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.crop-ne {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.crop-sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+.crop-se {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
 }

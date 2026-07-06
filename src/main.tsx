@@ -6,6 +6,7 @@ import "@/styles/global.css";
 import "@/commands/coreCommands";
 import "@/editors/pdf/pdfCommands";
 import "@/editors/pdf/pdfPageCommands";
+import "@/editors/pdf/pdfOutputCommands";
 import { App } from "@/App";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 

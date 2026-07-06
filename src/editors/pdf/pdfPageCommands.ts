@@ -11,10 +11,17 @@ import {
   insertBlankPage,
   insertFromPdf,
   insertImage,
+  cropPages,
   extractPages,
   splitEveryN,
-  mergeDocs,
+  splitByRanges,
+  splitByTargetSize,
+  type MergeInput,
 } from "@/editors/pdf/pdfMutations";
+import { parsePageRanges } from "@/editors/pdf/pdfRanges";
+import { destToPageIndex } from "@/editors/pdf/pdfDest";
+import { resolveOutlineTree } from "@/editors/pdf/pdfOutlineResolve";
+import { pdfInputFromBytes, performMerge } from "@/editors/pdf/pdfMergeRun";
 
 const noArgs = z.object({});
 const A4: [number, number] = [595, 842];
@@ -107,6 +114,28 @@ registerCommand({
 });
 
 registerCommand({
+  id: "pdf.cropPages",
+  title: "Crop pages",
+  editor: "pdf",
+  // `box` is in PDF points (origin bottom-left); the crop dialog builds it. When
+  // `pages` is omitted it falls back to the current selection / current page.
+  schema: z.object({
+    box: z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    }),
+    pages: z.array(z.number().int().nonnegative()).optional(),
+  }),
+  run: ({ box, pages }) => {
+    const target = pages && pages.length ? pages : targetPages();
+    return mutateActive((bytes) => cropPages(bytes, target, box));
+  },
+  undo: undoMutation,
+});
+
+registerCommand({
   id: "pdf.insertFromPdf",
   title: "Insert pages from another PDF",
   editor: "pdf",
@@ -153,6 +182,11 @@ registerCommand({
   },
 });
 
+function downloadParts(baseName: string, label: string, parts: Uint8Array[]): void {
+  const base = baseName.replace(/\.pdf$/i, "");
+  parts.forEach((part, i) => downloadFile(`${base}-${label}${i + 1}.pdf`, part));
+}
+
 registerCommand({
   id: "pdf.splitEveryN",
   title: "Split into files of N pages",
@@ -161,9 +195,63 @@ registerCommand({
   run: async ({ n }) => {
     const d = usePdfStore.getState().getActive();
     if (!d) return;
-    const parts = await splitEveryN(d.bytes, n);
-    const base = d.name.replace(/\.pdf$/i, "");
-    parts.forEach((part, i) => downloadFile(`${base}-part${i + 1}.pdf`, part));
+    downloadParts(d.name, "part", await splitEveryN(d.bytes, n));
+  },
+});
+
+registerCommand({
+  id: "pdf.splitByRanges",
+  title: "Split by page ranges",
+  editor: "pdf",
+  // `spec` is a 1-based range string, e.g. "1-3, 5, 8-10"; one file per range.
+  schema: z.object({ spec: z.string().default("") }),
+  run: async ({ spec }) => {
+    const d = usePdfStore.getState().getActive();
+    if (!d) return;
+    const ranges = parsePageRanges(spec, d.numPages);
+    if (ranges.length === 0) return;
+    downloadParts(d.name, "range", await splitByRanges(d.bytes, ranges));
+  },
+});
+
+registerCommand({
+  id: "pdf.splitByTargetSize",
+  title: "Split under a target file size",
+  editor: "pdf",
+  schema: z.object({ mb: z.number().positive().default(10) }),
+  run: async ({ mb }) => {
+    const d = usePdfStore.getState().getActive();
+    if (!d) return;
+    downloadParts(d.name, "part", await splitByTargetSize(d.bytes, mb * 1024 * 1024));
+  },
+});
+
+registerCommand({
+  id: "pdf.splitByBookmark",
+  title: "Split by top-level bookmark",
+  editor: "pdf",
+  schema: noArgs,
+  run: async () => {
+    const d = usePdfStore.getState().getActive();
+    if (!d) return;
+    const outline = await d.doc.getOutline();
+    if (!outline || outline.length === 0) return;
+    // Resolve each top-level bookmark to its 0-based start page.
+    const starts: number[] = [];
+    for (const item of outline) {
+      const idx = await destToPageIndex(d.doc, item.dest as string | unknown[] | null);
+      if (idx !== null) starts.push(idx);
+    }
+    const bounds = [...new Set(starts)].sort((a, b) => a - b);
+    if (bounds.length === 0) return;
+    // Each section runs from one bookmark's page up to (but not including) the
+    // next. Any pages before the first bookmark ride with the first section.
+    const ranges: [number, number][] = bounds.map((start, k) => {
+      const from = k === 0 ? 0 : start;
+      const to = k + 1 < bounds.length ? bounds[k + 1] - 1 : d.numPages - 1;
+      return [from, to] as [number, number];
+    });
+    downloadParts(d.name, "section", await splitByRanges(d.bytes, ranges));
   },
 });
 
@@ -176,8 +264,13 @@ registerCommand({
     const files = await getFileService().openMultiple({ accept: [".pdf"] });
     if (files.length === 0) return;
     const active = usePdfStore.getState().getActive();
-    const byteList = active ? [active.bytes, ...files.map((f) => f.data)] : files.map((f) => f.data);
-    const merged = await mergeDocs(byteList);
-    await usePdfStore.getState().openBytes("merged.pdf", merged);
+    const inputs: MergeInput[] = [];
+    // The active document leads, then each picked file in selection order. The
+    // richer drag-to-order tray lives in PdfMergeDialog.
+    if (active) {
+      inputs.push({ kind: "pdf", bytes: active.bytes, outline: await resolveOutlineTree(active.doc) });
+    }
+    for (const f of files) inputs.push(await pdfInputFromBytes(f.data));
+    await performMerge(inputs);
   },
 });

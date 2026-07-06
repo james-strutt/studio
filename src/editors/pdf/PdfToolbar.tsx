@@ -1,10 +1,17 @@
+import { useState } from "react";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 import { dispatch } from "@/commands/history";
+import { PdfSplitDialog } from "@/editors/pdf/PdfSplitDialog";
+import { PdfMergeDialog } from "@/editors/pdf/PdfMergeDialog";
+import { PdfCropDialog } from "@/editors/pdf/PdfCropDialog";
 
 export function PdfToolbar(): JSX.Element {
   const doc = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
   const sidebar = usePdfStore((s) => s.sidebar);
   const setSidebar = usePdfStore((s) => s.setSidebar);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
 
   return (
     <div className="pdf-toolbar">
@@ -61,11 +68,24 @@ export function PdfToolbar(): JSX.Element {
           >
             ◑
           </button>
+          <span className="pdf-toolbar-sep" aria-hidden="true" />
+          <button className="btn btn-quiet" onClick={() => setCropOpen(true)}>
+            Crop…
+          </button>
+          <button className="btn btn-quiet" onClick={() => setSplitOpen(true)}>
+            Split…
+          </button>
+          <button className="btn btn-quiet" onClick={() => setMergeOpen(true)}>
+            Merge…
+          </button>
           <span className="pdf-page-label">
             {doc.currentPage} / {doc.numPages}
           </span>
         </>
       )}
+      {doc && cropOpen && <PdfCropDialog doc={doc} onClose={() => setCropOpen(false)} />}
+      {doc && splitOpen && <PdfSplitDialog doc={doc} onClose={() => setSplitOpen(false)} />}
+      {doc && mergeOpen && <PdfMergeDialog doc={doc} onClose={() => setMergeOpen(false)} />}
     </div>
   );
 }

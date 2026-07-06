@@ -1,4 +1,5 @@
 import { useShellStore, type EditorId } from "@/store/useShellStore";
+import { usePdfStore } from "@/editors/pdf/pdfStore";
 import { dispatch } from "@/commands/history";
 
 const EDITORS: { id: EditorId; label: string }[] = [
@@ -9,6 +10,8 @@ const EDITORS: { id: EditorId; label: string }[] = [
 
 export function TopBar(): JSX.Element {
   const active = useShellStore((s) => s.activeEditor);
+  const activePdf = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
+  const canSave = active === "pdf" && !!activePdf;
 
   return (
     <header className="shell-top">
@@ -25,8 +28,18 @@ export function TopBar(): JSX.Element {
         ))}
       </div>
       <div className="shell-top-right">
-        <span className="badge badge-neutral">saved</span>
-        <button className="btn btn-primary">Export</button>
+        {canSave && (
+          <span className={`badge ${activePdf.dirty ? "badge-caution" : "badge-neutral"}`}>
+            {activePdf.dirty ? "unsaved" : "saved"}
+          </span>
+        )}
+        <button
+          className="btn btn-primary"
+          disabled={!canSave}
+          onClick={() => canSave && void dispatch("pdf.save", {})}
+        >
+          Export
+        </button>
       </div>
     </header>
   );

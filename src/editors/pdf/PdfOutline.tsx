@@ -1,23 +1,12 @@
 import { useEffect, useState } from "react";
 import type { PdfDoc } from "@/editors/pdf/pdfStore";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
+import { destToPageIndex } from "@/editors/pdf/pdfDest";
 
 interface OutlineNode {
   title: string;
   dest: string | unknown[] | null;
   items: OutlineNode[];
-}
-
-async function destToPage(doc: PdfDoc["doc"], dest: string | unknown[] | null): Promise<number | null> {
-  if (!dest) return null;
-  const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
-  if (!explicit || explicit.length === 0) return null;
-  try {
-    const index = await doc.getPageIndex(explicit[0] as Parameters<typeof doc.getPageIndex>[0]);
-    return index + 1;
-  } catch {
-    return null;
-  }
 }
 
 function OutlineItems({ nodes, doc }: { nodes: OutlineNode[]; doc: PdfDoc["doc"] }): JSX.Element {
@@ -29,8 +18,8 @@ function OutlineItems({ nodes, doc }: { nodes: OutlineNode[]; doc: PdfDoc["doc"]
           <button
             className="pdf-outline-item"
             onClick={async () => {
-              const page = await destToPage(doc, n.dest);
-              if (page) jumpTo(page);
+              const index = await destToPageIndex(doc, n.dest);
+              if (index !== null) jumpTo(index + 1);
             }}
           >
             {n.title}

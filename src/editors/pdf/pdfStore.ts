@@ -31,6 +31,7 @@ interface PdfStore {
   selection: number[];
   openBytes: (name: string, bytes: Uint8Array) => Promise<string>;
   replaceBytes: (id: string, bytes: Uint8Array) => Promise<void>;
+  markSaved: (id: string, name?: string) => void;
   closeDoc: (id: string) => void;
   setActive: (id: string) => void;
   toggleSelect: (index: number, additive: boolean) => void;
@@ -99,6 +100,11 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
       };
     });
   },
+
+  markSaved: (id, name) =>
+    set((s) => ({
+      docs: patchDoc(s.docs, id, { dirty: false, ...(name ? { name } : {}) }),
+    })),
 
   closeDoc(id) {
     set((s) => {

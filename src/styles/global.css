@@ -275,6 +275,14 @@ body {
   border: 1px solid var(--line);
 }
 
+/* Caution pill — amber, the design-language "leaves this device"/attention
+   colour. Reused here for the unsaved-changes state. */
+.badge-caution {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 kbd {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -382,6 +390,95 @@ kbd {
   padding: var(--space-4);
   color: var(--ink-3);
   font-size: var(--text-sm);
+}
+
+/* ---- form controls ---- */
+.input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  padding: var(--space-2) var(--space-3);
+  outline: none;
+}
+
+.input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+}
+
+/* ---- modal dialog ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  z-index: 120;
+}
+
+.modal {
+  width: min(94vw, 520px);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-2);
+  outline: none;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: var(--space-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
 }
 
 @media (max-width: 860px) {

@@ -10,3 +10,4 @@ release
 # local test fixtures (regenerate via scripts/gen-*.mjs)
 public/sample.pdf
 public/big.pdf
+public/form-doc.pdf
