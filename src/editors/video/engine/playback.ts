@@ -226,10 +226,16 @@ class PlaybackEngine {
 
   /** Start players for clips under the playhead, stop players for clips that left it. */
   private reconcile(project: VideoProject, t: number): void {
-    const wanted = new Map<string, { clip: Clip; muted: boolean }>();
+    const wanted = new Map<string, { clip: Clip; muted: boolean; visual: boolean }>();
     for (const track of project.tracks) {
       const clip = clipAt(project, track.id, t);
-      if (clip) wanted.set(clip.id, { clip, muted: track.muted });
+      if (clip) {
+        wanted.set(clip.id, {
+          clip,
+          muted: track.muted,
+          visual: track.kind === "video" || track.kind === "overlay",
+        });
+      }
     }
     for (const [id, p] of this.players) {
       if (!wanted.has(id)) {
@@ -238,12 +244,12 @@ class PlaybackEngine {
         this.players.delete(id);
       }
     }
-    for (const [id, { clip, muted }] of wanted) {
-      if (!this.players.has(id)) this.startPlayer(clip, muted, t);
+    for (const [id, { clip, muted, visual }] of wanted) {
+      if (!this.players.has(id)) this.startPlayer(clip, muted, visual, t);
     }
   }
 
-  private startPlayer(clip: Clip, muted: boolean, t: number): void {
+  private startPlayer(clip: Clip, muted: boolean, visual: boolean, t: number): void {
     const handle = getMedia(clip.sourceId);
     if (!handle || handle.bitmap) {
       if (handle) this.players.set(clip.id, { video: null, audio: null });
@@ -251,12 +257,12 @@ class PlaybackEngine {
     }
     const sourceStart = sourceTimeAt(clip, t);
     const sourceNow = (): number => sourceTimeAt(clip, this.playheadNow());
-    const videoSink = handle.proxy ?? handle.video; // timeline plays proxies; export uses originals
+    const videoSink = visual ? (handle.proxy ?? handle.video) : null; // no video decode on audio lanes
     const video = videoSink
       ? new ClipVideoPlayer(videoSink, sourceStart, clip.outPoint, sourceNow)
       : null;
     const audio =
-      handle.audio && !muted && this.audioCtx
+      handle.audio && !muted && clip.volume > 0 && this.audioCtx
         ? new ClipAudioPlayer(
             handle.audio,
             this.audioCtx,

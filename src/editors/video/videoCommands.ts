@@ -11,12 +11,22 @@ import {
   addClip,
   addMarker,
   addSource,
+  clipEnd,
+  detachAudio,
   makeClip,
+  moveClip,
   newId,
+  removeClip,
   removeMarker,
+  rippleDelete,
+  rollEdit,
   setTrackMuted,
+  slipClip,
+  splitClip,
   trackEnd,
   tracksOfKind,
+  trimClipLeft,
+  trimClipRight,
   type MediaSource,
   type VideoProject,
 } from "@/editors/video/videoModel";
@@ -140,6 +150,112 @@ registerCommand({
   shortcut: "Space",
   schema: z.object({}),
   run: () => playbackEngine.togglePlay(),
+});
+
+/** Resolve an optional clipId argument to the selected clip. */
+function targetClip(clipId?: string): string | null {
+  return clipId ?? useVideoStore.getState().selectedClipId;
+}
+
+registerCommand({
+  id: "video.trimClip",
+  title: "Trim clip edge",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), edge: z.enum(["left", "right"]), time: z.number() }),
+  run: ({ clipId, edge, time }) =>
+    mutateProject((p) =>
+      edge === "left" ? trimClipLeft(p, clipId, time) : trimClipRight(p, clipId, time),
+    ),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.splitAtPlayhead",
+  title: "Split at playhead",
+  editor: "video",
+  shortcut: "S",
+  schema: z.object({}),
+  run: () => {
+    const s = useVideoStore.getState();
+    const t = s.playhead;
+    return mutateProject((p) => {
+      const targets = s.selectedClipId
+        ? p.clips.filter((c) => c.id === s.selectedClipId)
+        : p.clips.filter((c) => t > c.start && t < clipEnd(c));
+      return targets.reduce((acc, c) => splitClip(acc, c.id, t), p);
+    });
+  },
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.deleteClip",
+  title: "Delete clip",
+  editor: "video",
+  shortcut: "Del",
+  schema: z.object({ clipId: z.string().optional() }),
+  run: ({ clipId }) => {
+    const id = targetClip(clipId);
+    if (!id) return null;
+    useVideoStore.getState().selectClip(null);
+    return mutateProject((p) => removeClip(p, id));
+  },
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.rippleDelete",
+  title: "Ripple delete clip (close the gap)",
+  editor: "video",
+  shortcut: "Shift+Del",
+  schema: z.object({ clipId: z.string().optional() }),
+  run: ({ clipId }) => {
+    const id = targetClip(clipId);
+    if (!id) return null;
+    useVideoStore.getState().selectClip(null);
+    return mutateProject((p) => rippleDelete(p, id));
+  },
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.rollEdit",
+  title: "Roll edit (move shared boundary)",
+  editor: "video",
+  schema: z.object({ leftClipId: z.string(), rightClipId: z.string(), time: z.number() }),
+  run: ({ leftClipId, rightClipId, time }) =>
+    mutateProject((p) => rollEdit(p, leftClipId, rightClipId, time)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.slipClip",
+  title: "Slip clip (slide source window)",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), delta: z.number() }),
+  run: ({ clipId, delta }) => mutateProject((p) => slipClip(p, clipId, delta)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.moveClip",
+  title: "Move clip",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), start: z.number(), trackId: z.string().optional() }),
+  run: ({ clipId, start, trackId }) => mutateProject((p) => moveClip(p, clipId, start, trackId)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.detachAudio",
+  title: "Detach audio to audio track",
+  editor: "video",
+  schema: z.object({ clipId: z.string().optional() }),
+  run: ({ clipId }) => {
+    const id = targetClip(clipId);
+    return id ? mutateProject((p) => detachAudio(p, id)) : null;
+  },
+  undo: undoProject,
 });
 
 registerCommand({

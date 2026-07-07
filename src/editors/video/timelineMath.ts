@@ -34,6 +34,28 @@ export function snapTime(
   return best;
 }
 
+/**
+ * Snap a moving clip by either edge: whichever of start/end lands closest to a
+ * candidate wins. Returns the adjusted start.
+ */
+export function snapMove(
+  start: number,
+  duration: number,
+  candidates: number[],
+  pxPerSecond: number,
+  thresholdPx = 8,
+): number {
+  const snappedStart = snapTime(start, candidates, pxPerSecond, thresholdPx);
+  const snappedEnd = snapTime(start + duration, candidates, pxPerSecond, thresholdPx);
+  const startSnapped = snappedStart !== start;
+  const endSnapped = snappedEnd !== start + duration;
+  const byStart = Math.abs(snappedStart - start);
+  const byEnd = Math.abs(snappedEnd - (start + duration));
+  if (startSnapped && (!endSnapped || byStart <= byEnd)) return snappedStart;
+  if (endSnapped) return snappedEnd - duration;
+  return start;
+}
+
 export const MIN_PX_PER_SECOND = 4;
 export const MAX_PX_PER_SECOND = 500;
 

@@ -228,6 +228,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
+  line-height: 34px;
+  pointer-events: none;
+}
+
+.tl-clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.tl-clip-handle-l {
+  left: 0;
+}
+
+.tl-clip-handle-r {
+  right: 0;
+}
+
+.tl-clip-handle:hover {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 .tl-playhead {

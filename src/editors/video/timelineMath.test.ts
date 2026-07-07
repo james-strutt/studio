@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampZoom, snapTime, tickStep } from "@/editors/video/timelineMath";
+import { clampZoom, snapMove, snapTime, tickStep } from "@/editors/video/timelineMath";
 
 describe("timeline math", () => {
   it("picks a tick step that keeps labels ~90px apart", () => {
@@ -14,6 +14,15 @@ describe("timeline math", () => {
     expect(snapTime(10.1, [10], 50)).toBe(10);
     expect(snapTime(10.3, [10], 50)).toBe(10.3); // too far
     expect(snapTime(5.05, [5, 5.08], 50)).toBe(5.08); // nearest wins
+  });
+
+  it("snaps a moving clip by whichever edge is closer to a candidate", () => {
+    // clip 3..7, candidate 7.1 → end snaps, start becomes 3.1
+    expect(snapMove(3, 4, [7.1], 50)).toBeCloseTo(3.1);
+    // candidate 2.9 → start snaps directly
+    expect(snapMove(3, 4, [2.9], 50)).toBeCloseTo(2.9);
+    // nothing close → unchanged
+    expect(snapMove(3, 4, [20], 50)).toBe(3);
   });
 
   it("clamps zoom to sane bounds", () => {

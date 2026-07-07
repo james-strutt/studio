@@ -177,6 +177,116 @@ export function removeClip(project: VideoProject, clipId: string): VideoProject 
   return { ...project, clips: project.clips.filter((c) => c.id !== clipId) };
 }
 
+const MIN_CLIP_SECONDS = 0.05;
+
+/** Bounded source duration, or null for stills (images loop forever). */
+function sourceDurationOf(project: VideoProject, clip: Clip): number | null {
+  const src = project.sources.find((s) => s.id === clip.sourceId);
+  return src && src.duration > 0 ? src.duration : null;
+}
+
+/** Drag the left edge: start and inPoint move together (media stays put on the timeline). */
+export function trimClipLeft(project: VideoProject, clipId: string, newStart: number): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const end = clipEnd(c);
+      const minStart = Math.max(0, c.start - c.inPoint); // can't reveal media before source 0
+      const ns = Math.min(Math.max(newStart, minStart), end - MIN_CLIP_SECONDS);
+      return { ...c, start: ns, inPoint: c.inPoint + (ns - c.start) };
+    }),
+  };
+}
+
+/** Drag the right edge: outPoint follows, clamped to the source's end. */
+export function trimClipRight(project: VideoProject, clipId: string, newEnd: number): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const srcDur = sourceDurationOf(project, c);
+      const maxOut = srcDur ?? Number.POSITIVE_INFINITY;
+      const no = Math.min(Math.max(newEnd - c.start + c.inPoint, c.inPoint + MIN_CLIP_SECONDS), maxOut);
+      return { ...c, outPoint: no };
+    }),
+  };
+}
+
+/** Delete a clip and close the gap on its own track (later clips shift left). */
+export function rippleDelete(project: VideoProject, clipId: string): VideoProject {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) return project;
+  const d = clipDuration(clip);
+  const end = clipEnd(clip);
+  return {
+    ...project,
+    clips: project.clips
+      .filter((c) => c.id !== clipId)
+      .map((c) =>
+        c.trackId === clip.trackId && c.start >= end - 1e-9 ? { ...c, start: c.start - d } : c,
+      ),
+  };
+}
+
+/** Move the shared boundary of two abutting clips without moving anything else. */
+export function rollEdit(
+  project: VideoProject,
+  leftId: string,
+  rightId: string,
+  time: number,
+): VideoProject {
+  const left = project.clips.find((c) => c.id === leftId);
+  const right = project.clips.find((c) => c.id === rightId);
+  if (!left || !right) return project;
+  const leftSrc = sourceDurationOf(project, left);
+  let t = Math.max(time, left.start + MIN_CLIP_SECONDS, right.start - right.inPoint);
+  t = Math.min(t, clipEnd(right) - MIN_CLIP_SECONDS);
+  if (leftSrc !== null) t = Math.min(t, left.start - left.inPoint + leftSrc);
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id === leftId) return { ...c, outPoint: c.inPoint + (t - c.start) };
+      if (c.id === rightId) return { ...c, inPoint: c.inPoint + (t - c.start), start: t };
+      return c;
+    }),
+  };
+}
+
+/** Slide the source window under a fixed timeline position (no-op for stills). */
+export function slipClip(project: VideoProject, clipId: string, delta: number): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const srcDur = sourceDurationOf(project, c);
+      if (srcDur === null) return c;
+      const d = Math.max(-c.inPoint, Math.min(delta, srcDur - c.outPoint));
+      return { ...c, inPoint: c.inPoint + d, outPoint: c.outPoint + d };
+    }),
+  };
+}
+
+/**
+ * Detach a video clip's audio onto the first audio track: the video clip is
+ * silenced and a new audio clip with the same timing plays the sound.
+ */
+export function detachAudio(project: VideoProject, clipId: string): VideoProject {
+  const clip = project.clips.find((c) => c.id === clipId);
+  const audioTrack = tracksOfKind(project, "audio")[0];
+  if (!clip || !audioTrack || clip.trackId === audioTrack.id) return project;
+  const audioClip: Clip = {
+    ...clip,
+    id: id("clip"),
+    trackId: audioTrack.id,
+    transform: undefined,
+  };
+  return {
+    ...project,
+    clips: [...project.clips.map((c) => (c.id === clipId ? { ...c, volume: 0 } : c)), audioClip],
+  };
+}
+
 /** Which clip on a track is under the playhead at `time` (last one wins on overlap). */
 export function clipAt(project: VideoProject, trackId: string, time: number): Clip | null {
   let found: Clip | null = null;

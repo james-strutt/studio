@@ -13,6 +13,13 @@ import {
   sourceTimeAt,
   trackEnd,
   formatTimecode,
+  trimClipLeft,
+  trimClipRight,
+  rippleDelete,
+  rollEdit,
+  slipClip,
+  detachAudio,
+  clipEnd,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { containRect } from "@/editors/video/engine/renderMath";
@@ -82,6 +89,65 @@ describe("video project model", () => {
     const { project } = projectWithClip(); // clip on v1 ends at 8
     expect(trackEnd(project, "v1")).toBe(8);
     expect(trackEnd(project, "a1")).toBe(0);
+  });
+});
+
+describe("clip edit operations", () => {
+  it("trims the left edge keeping media in place, clamped to source start", () => {
+    const { project, clipId } = projectWithClip(); // start 2, in 0, out 6
+    const t = trimClipLeft(project, clipId, 4).clips[0];
+    expect(t).toMatchObject({ start: 4, inPoint: 2, outPoint: 6 });
+    // can't reveal media before source 0: start floor is 2 (start - inPoint)
+    expect(trimClipLeft(project, clipId, 0).clips[0].start).toBe(2);
+  });
+
+  it("trims the right edge clamped to source duration", () => {
+    const { project, clipId } = projectWithClip(); // source dur 10
+    expect(trimClipRight(project, clipId, 7).clips[0].outPoint).toBe(5); // in 0 + (7-2)
+    expect(trimClipRight(project, clipId, 100).clips[0].outPoint).toBe(10);
+  });
+
+  it("ripple-deletes: later clips on the same track close the gap", () => {
+    let { project } = projectWithClip(); // clip A: 2..8 on v1
+    const b = makeClip("v1", "s1", 8, 0, 4); // B: 8..12
+    const other = makeClip("a1", "s1", 8, 0, 4); // audio track untouched
+    project = addClip(addClip(project, b), other);
+    const out = rippleDelete(project, project.clips[0].id);
+    expect(out.clips.find((c) => c.id === b.id)?.start).toBe(2);
+    expect(out.clips.find((c) => c.id === other.id)?.start).toBe(8);
+  });
+
+  it("rolls the boundary between abutting clips", () => {
+    let { project } = projectWithClip(); // A: 2..8 (in 0 out 6)
+    const b = makeClip("v1", "s1", 8, 2, 6); // B: 8..12 (in 2)
+    project = addClip(project, b);
+    const a = project.clips[0];
+    const out = rollEdit(project, a.id, b.id, 7); // pull boundary 1s left
+    expect(out.clips[0].outPoint).toBe(5);
+    expect(out.clips[1]).toMatchObject({ start: 7, inPoint: 1 });
+    // clamp: right clip can't reveal media before its source 0 (in 2 → floor 6)
+    const clamped = rollEdit(project, a.id, b.id, 0).clips[1];
+    expect(clamped.start).toBe(6);
+  });
+
+  it("slips the source window without moving the clip", () => {
+    const { project, clipId } = projectWithClip(); // in 0 out 6, src 10
+    const s = slipClip(project, clipId, 2).clips[0];
+    expect(s).toMatchObject({ start: 2, inPoint: 2, outPoint: 8 });
+    // clamped at the source end: max slip is 10-6 = 4
+    expect(slipClip(project, clipId, 99).clips[0].outPoint).toBe(10);
+    expect(slipClip(project, clipId, -1).clips[0].inPoint).toBe(0);
+  });
+
+  it("detaches audio: silences the video clip and mirrors it on the audio track", () => {
+    const { project, clipId } = projectWithClip();
+    const out = detachAudio(project, clipId);
+    expect(out.clips).toHaveLength(2);
+    const video = out.clips.find((c) => c.id === clipId);
+    const audio = out.clips.find((c) => c.id !== clipId);
+    expect(video?.volume).toBe(0);
+    expect(audio).toMatchObject({ trackId: "a1", start: 2, inPoint: 0, outPoint: 6, volume: 1 });
+    expect(clipEnd(audio as never)).toBe(8);
   });
 });
 

@@ -1,20 +1,118 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import {
   clipDuration,
+  clipEnd,
   formatTimecode,
+  moveClip,
   projectDuration,
+  rollEdit,
+  slipClip,
+  trimClipLeft,
+  trimClipRight,
+  type Clip,
   type Track,
   type VideoProject,
 } from "@/editors/video/videoModel";
-import { clampZoom, pxToTime, tickStep, timeToPx } from "@/editors/video/timelineMath";
+import {
+  clampZoom,
+  pxToTime,
+  snapMove,
+  snapTime,
+  tickStep,
+  timeToPx,
+} from "@/editors/video/timelineMath";
 
 const TAIL_SECONDS = 10;
+const RULER_HEIGHT = 26;
+const LANE_HEIGHT = 48;
+const ABUT_EPS = 1e-6;
+
+type DragMode = "move" | "trim-left" | "trim-right" | "slip" | "roll";
+
+interface DragState {
+  mode: DragMode;
+  clipId: string;
+  neighbourId?: string; // roll partner
+  downX: number;
+  downY: number;
+  orig: Clip;
+  origTrackIndex: number;
+  candidates: number[]; // snap targets
+  moved: boolean;
+}
 
 function contentSeconds(project: VideoProject): number {
   return projectDuration(project) + TAIL_SECONDS;
+}
+
+/** Snap targets for a drag: every other clip edge, markers, playhead, zero. */
+function snapCandidates(project: VideoProject, excludeClipId: string, playhead: number): number[] {
+  const times = [0, playhead, ...project.markers.map((m) => m.time)];
+  for (const c of project.clips) {
+    if (c.id === excludeClipId) continue;
+    times.push(c.start, clipEnd(c));
+  }
+  return times;
+}
+
+/** Apply a drag gesture to the project with the same pure ops the drop command uses. */
+function previewDrag(
+  project: VideoProject,
+  drag: DragState,
+  dt: number,
+  laneIndex: number,
+  pps: number,
+): VideoProject {
+  const { mode, clipId, orig } = drag;
+  if (mode === "move") {
+    const start = snapMove(
+      Math.max(0, orig.start + dt),
+      clipDuration(orig),
+      drag.candidates,
+      pps,
+    );
+    const target = project.tracks[laneIndex];
+    const sameKind = target && target.kind === project.tracks[drag.origTrackIndex]?.kind;
+    return moveClip(project, clipId, start, sameKind ? target.id : undefined);
+  }
+  if (mode === "trim-left") {
+    return trimClipLeft(project, clipId, snapTime(orig.start + dt, drag.candidates, pps));
+  }
+  if (mode === "trim-right") {
+    return trimClipRight(project, clipId, snapTime(clipEnd(orig) + dt, drag.candidates, pps));
+  }
+  if (mode === "slip") {
+    return slipClip(project, clipId, -dt);
+  }
+  // roll: boundary follows the pointer from the original shared edge
+  if (drag.neighbourId) {
+    const boundary = snapTime(clipEnd(orig) + dt, drag.candidates, pps);
+    return rollEdit(project, clipId, drag.neighbourId, boundary);
+  }
+  return project;
+}
+
+function dropCommand(drag: DragState, preview: VideoProject): void {
+  const clip = preview.clips.find((c) => c.id === drag.clipId);
+  if (!clip) return;
+  if (drag.mode === "move") {
+    void dispatch("video.moveClip", { clipId: clip.id, start: clip.start, trackId: clip.trackId });
+  } else if (drag.mode === "trim-left") {
+    void dispatch("video.trimClip", { clipId: clip.id, edge: "left", time: clip.start });
+  } else if (drag.mode === "trim-right") {
+    void dispatch("video.trimClip", { clipId: clip.id, edge: "right", time: clipEnd(clip) });
+  } else if (drag.mode === "slip") {
+    void dispatch("video.slipClip", { clipId: clip.id, delta: clip.inPoint - drag.orig.inPoint });
+  } else if (drag.mode === "roll" && drag.neighbourId) {
+    void dispatch("video.rollEdit", {
+      leftClipId: clip.id,
+      rightClipId: drag.neighbourId,
+      time: clipEnd(clip),
+    });
+  }
 }
 
 function TimelinePlayhead({ pps }: { pps: number }): JSX.Element {
@@ -56,9 +154,15 @@ function Ruler({ project, pps }: { project: VideoProject; pps: number }): JSX.El
   );
 }
 
-function Lane({ project, track, pps }: { project: VideoProject; track: Track; pps: number }): JSX.Element {
+interface LaneProps {
+  project: VideoProject;
+  track: Track;
+  pps: number;
+  onClipPointerDown: (e: React.PointerEvent, clip: Clip) => void;
+}
+
+function Lane({ project, track, pps, onClipPointerDown }: LaneProps): JSX.Element {
   const selectedClipId = useVideoStore((s) => s.selectedClipId);
-  const selectClip = useVideoStore((s) => s.selectClip);
   return (
     <div className={`tl-lane tl-lane-${track.kind}`}>
       {project.clips
@@ -67,15 +171,18 @@ function Lane({ project, track, pps }: { project: VideoProject; track: Track; pp
           const source = project.sources.find((s) => s.id === clip.sourceId);
           const selected = clip.id === selectedClipId;
           return (
-            <button
+            <div
               key={clip.id}
+              role="button"
+              tabIndex={0}
               className={`tl-clip${selected ? " cropmark tl-clip-selected" : ""}`}
               style={{ left: timeToPx(clip.start, pps), width: timeToPx(clipDuration(clip), pps) }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => selectClip(clip.id)}
+              onPointerDown={(e) => onClipPointerDown(e, clip)}
             >
+              <span className="tl-clip-handle tl-clip-handle-l" />
               <span className="tl-clip-name">{source?.name ?? clip.sourceId}</span>
-            </button>
+              <span className="tl-clip-handle tl-clip-handle-r" />
+            </div>
           );
         })}
     </div>
@@ -87,6 +194,8 @@ export function Timeline(): JSX.Element | null {
   const pps = useVideoStore((s) => s.pxPerSecond);
   const selectClip = useVideoStore((s) => s.selectClip);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const [preview, setPreview] = useState<VideoProject | null>(null);
   const hasProject = project !== null;
 
   // Native non-passive wheel listener: React's synthetic onWheel is passive,
@@ -110,7 +219,8 @@ export function Timeline(): JSX.Element | null {
   }, [hasProject]);
 
   if (!project) return null;
-  const width = timeToPx(contentSeconds(project), pps);
+  const shown = preview ?? project;
+  const width = timeToPx(contentSeconds(shown), pps);
 
   const seekFromEvent = (e: React.PointerEvent): void => {
     const canvas = scrollRef.current?.querySelector(".tl-canvas");
@@ -119,17 +229,74 @@ export function Timeline(): JSX.Element | null {
     playbackEngine.seek(pxToTime(e.clientX - rect.left, pps));
   };
 
-  const onPointerDown = (e: React.PointerEvent): void => {
-    selectClip(null);
-    seekFromEvent(e);
+  const onClipPointerDown = (e: React.PointerEvent, clip: Clip): void => {
+    e.stopPropagation();
+    selectClip(clip.id);
+    const target = e.target as HTMLElement;
+    const isLeft = target.classList.contains("tl-clip-handle-l");
+    const isRight = target.classList.contains("tl-clip-handle-r");
+    const trackIndex = project.tracks.findIndex((t) => t.id === clip.trackId);
+
+    let mode: DragMode = "move";
+    let neighbourId: string | undefined;
+    if (isLeft || isRight) {
+      mode = isLeft ? "trim-left" : "trim-right";
+      if (e.altKey && isRight) {
+        const next = project.clips.find(
+          (c) =>
+            c.id !== clip.id &&
+            c.trackId === clip.trackId &&
+            Math.abs(c.start - clipEnd(clip)) < ABUT_EPS,
+        );
+        if (next) {
+          mode = "roll";
+          neighbourId = next.id;
+        }
+      }
+    } else if (e.altKey) {
+      mode = "slip";
+    }
+
+    dragRef.current = {
+      mode,
+      clipId: clip.id,
+      neighbourId,
+      downX: e.clientX,
+      downY: e.clientY,
+      orig: clip,
+      origTrackIndex: trackIndex,
+      candidates: snapCandidates(project, clip.id, useVideoStore.getState().playhead),
+      moved: false,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onClipPointerMove = (e: React.PointerEvent): void => {
+    const drag = dragRef.current;
+    if (!drag || e.buttons !== 1) return;
+    const dt = pxToTime(e.clientX - drag.downX, pps);
+    if (!drag.moved && Math.abs(e.clientX - drag.downX) + Math.abs(e.clientY - drag.downY) < 3) return;
+    drag.moved = true;
+    const canvas = scrollRef.current?.querySelector(".tl-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    const laneIndex = rect
+      ? Math.max(0, Math.min(project.tracks.length - 1, Math.floor((e.clientY - rect.top - RULER_HEIGHT) / LANE_HEIGHT)))
+      : drag.origTrackIndex;
+    setPreview(previewDrag(project, drag, dt, laneIndex, pps));
+  };
+
+  const onClipPointerUp = (): void => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag?.moved && preview) dropCommand(drag, preview);
+    setPreview(null);
   };
 
   return (
     <div className="tl">
       <div className="tl-headers">
         <div className="tl-corner" />
-        {project.tracks.map((track) => (
+        {shown.tracks.map((track) => (
           <div key={track.id} className="tl-head">
             <span className="tl-head-name">{track.name}</span>
             <button
@@ -146,14 +313,26 @@ export function Timeline(): JSX.Element | null {
         <div
           className="tl-canvas"
           style={{ width }}
-          onPointerDown={onPointerDown}
-          onPointerMove={(e) => {
-            if (e.buttons === 1) seekFromEvent(e);
+          onPointerDown={(e) => {
+            selectClip(null);
+            seekFromEvent(e);
+            e.currentTarget.setPointerCapture(e.pointerId);
           }}
+          onPointerMove={(e) => {
+            if (dragRef.current) onClipPointerMove(e);
+            else if (e.buttons === 1) seekFromEvent(e);
+          }}
+          onPointerUp={onClipPointerUp}
         >
-          <Ruler project={project} pps={pps} />
-          {project.tracks.map((track) => (
-            <Lane key={track.id} project={project} track={track} pps={pps} />
+          <Ruler project={shown} pps={pps} />
+          {shown.tracks.map((track) => (
+            <Lane
+              key={track.id}
+              project={shown}
+              track={track}
+              pps={pps}
+              onClipPointerDown={onClipPointerDown}
+            />
           ))}
           <TimelinePlayhead pps={pps} />
         </div>

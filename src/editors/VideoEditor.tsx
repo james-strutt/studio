@@ -32,6 +32,32 @@ function ProxyChip(): JSX.Element | null {
   return label ? <span className="vid-chip">{label}</span> : null;
 }
 
+function SelectedClipActions(): JSX.Element | null {
+  const project = useVideoStore((s) => s.project);
+  const selectedClipId = useVideoStore((s) => s.selectedClipId);
+  if (!project || !selectedClipId) return null;
+  const clip = project.clips.find((c) => c.id === selectedClipId);
+  if (!clip) return null;
+  const source = project.sources.find((s) => s.id === clip.sourceId);
+  const track = project.tracks.find((t) => t.id === clip.trackId);
+  const canDetach = track?.kind !== "audio" && source?.kind === "video" && clip.volume > 0;
+  return (
+    <>
+      <button className="btn btn-quiet" onClick={() => void dispatch("video.splitAtPlayhead", {})}>
+        Split (S)
+      </button>
+      <button className="btn btn-quiet" onClick={() => void dispatch("video.rippleDelete", {})}>
+        Ripple delete
+      </button>
+      {canDetach && (
+        <button className="btn btn-quiet" onClick={() => void dispatch("video.detachAudio", {})}>
+          Detach audio
+        </button>
+      )}
+    </>
+  );
+}
+
 export function VideoEditor(): JSX.Element {
   const project = useVideoStore((s) => s.project);
 
@@ -56,6 +82,10 @@ export function VideoEditor(): JSX.Element {
         playbackEngine.togglePlay();
       } else if (e.key === "m" && s.project) {
         void dispatch("video.addMarker", {});
+      } else if (e.key === "s" && s.project) {
+        void dispatch("video.splitAtPlayhead", {});
+      } else if ((e.key === "Delete" || e.key === "Backspace") && s.selectedClipId) {
+        void dispatch(e.shiftKey ? "video.rippleDelete" : "video.deleteClip", {});
       } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && s.project) {
         e.preventDefault();
         const step = e.shiftKey ? 1 : 1 / s.project.fps;
@@ -75,6 +105,7 @@ export function VideoEditor(): JSX.Element {
         <button className="btn btn-quiet" onClick={() => void dispatch("video.importMedia", {})}>
           Import media
         </button>
+        <SelectedClipActions />
         <ProxyChip />
         {project && (
           <span className="vid-project-meta">
