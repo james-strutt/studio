@@ -8,6 +8,7 @@ import {
   setPageBackground,
   addLink,
 } from "@/editors/pdf/pdfContent";
+import { redactText, redactPattern, sanitise } from "@/editors/pdf/pdfRedaction";
 
 const rgbSchema = z.object({ r: z.number(), g: z.number(), b: z.number() });
 
@@ -89,6 +90,36 @@ registerCommand({
     ]),
   }),
   run: ({ pageIndex, rect, target }) => mutateActive((bytes) => addLink(bytes, pageIndex, rect, target)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.redactText",
+  title: "Redact text",
+  editor: "pdf",
+  schema: z.object({ needles: z.array(z.string()) }),
+  run: ({ needles }) => {
+    if (needles.every((n) => !n.trim())) return null;
+    return mutateActive((bytes) => redactText(bytes, needles));
+  },
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.redactPattern",
+  title: "Redact by pattern",
+  editor: "pdf",
+  schema: z.object({ kind: z.enum(["email", "phone", "custom"]), custom: z.string().optional() }),
+  run: ({ kind, custom }) => mutateActive((bytes) => redactPattern(bytes, kind, custom)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.sanitise",
+  title: "Sanitise (strip metadata)",
+  editor: "pdf",
+  schema: z.object({}),
+  run: () => mutateActive((bytes) => sanitise(bytes)),
   undo: undoMutation,
 });
 
