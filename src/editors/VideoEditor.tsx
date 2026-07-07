@@ -6,6 +6,7 @@ import { Timeline } from "@/editors/video/Timeline";
 import { Storyboard } from "@/editors/video/Storyboard";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
+import { startRecording, type RecordKind } from "@/editors/video/recorder";
 import { ClipTextDialog, ClipMotionDialog } from "@/editors/video/ClipDialogs";
 import { previousAbutting } from "@/editors/video/videoModel";
 import { dispatch } from "@/commands/history";
@@ -23,6 +24,36 @@ function proxyChipLabel(statuses: ProxyStatus[]): string | null {
   if (statuses.some((s) => s.state === "failed")) return "Proxy · 720p · failed";
   if (statuses.some((s) => s.state === "ready")) return "Proxy · 720p · ready";
   return null;
+}
+
+const RECORD_KINDS: { kind: RecordKind; label: string }[] = [
+  { kind: "screen", label: "⏺ Screen" },
+  { kind: "camera", label: "⏺ Camera" },
+  { kind: "mic", label: "⏺ Mic" },
+];
+
+function RecordControls(): JSX.Element {
+  const recording = useVideoStore((s) => s.recording);
+  if (recording) {
+    return (
+      <button className="btn btn-quiet vid-rec-live" onClick={() => recording.stop()}>
+        ■ Stop {recording.kind}
+      </button>
+    );
+  }
+  return (
+    <>
+      {RECORD_KINDS.map(({ kind, label }) => (
+        <button
+          key={kind}
+          className="btn btn-quiet"
+          onClick={() => startRecording(kind).catch(() => undefined)}
+        >
+          {label}
+        </button>
+      ))}
+    </>
+  );
 }
 
 function ProxyChip(): JSX.Element | null {
@@ -226,6 +257,7 @@ export function VideoEditor(): JSX.Element {
             Add overlay
           </button>
         )}
+        <RecordControls />
         {project && (
           <div className="seg" role="group" aria-label="Editing mode">
             {MODES.map((m) => (

@@ -111,6 +111,11 @@
   font-size: var(--text-xs);
 }
 
+.vid-rec-live {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
 .vid-volume {
   display: flex;
   align-items: center;

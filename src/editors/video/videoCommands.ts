@@ -119,6 +119,36 @@ const AUDIO_ACCEPT = MEDIA_ACCEPT.filter((ext) =>
   [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"].includes(ext),
 );
 
+/** Shared import: register a media blob, persist it, and append a clip. */
+async function importBlob(blob: Blob, name: string): Promise<ProjectSnapshot | null> {
+  const store = useVideoStore.getState();
+  if (!store.getProject()) store.createProject();
+
+  const sourceId = newId("src");
+  const handle = await registerMedia(sourceId, blob);
+  void storeMediaBlob(sourceId, blob);
+  void ensureProxy(sourceId);
+  const source: MediaSource = {
+    id: sourceId,
+    name,
+    url: URL.createObjectURL(blob),
+    kind: handle.info.kind,
+    duration: handle.info.duration,
+    width: handle.info.width,
+    height: handle.info.height,
+  };
+
+  const snap = mutateProject((p) => {
+    const track = tracksOfKind(p, handle.info.kind === "audio" ? "audio" : "video")[0];
+    if (!track) return p;
+    const start = trackEnd(p, track.id);
+    const duration = handle.info.kind === "image" ? IMAGE_CLIP_SECONDS : handle.info.duration;
+    return addClip(addSource(p, source), makeClip(track.id, sourceId, start, 0, duration));
+  });
+  void playbackEngine.renderStill();
+  return snap;
+}
+
 registerCommand({
   id: "video.importMedia",
   title: "Import media (video, audio, image)",
@@ -129,34 +159,18 @@ registerCommand({
       accept: kind === "audio" ? AUDIO_ACCEPT : MEDIA_ACCEPT,
     });
     if (!file) return null;
-    const store = useVideoStore.getState();
-    if (!store.getProject()) store.createProject();
-
-    const sourceId = newId("src");
     const blob = new Blob([Uint8Array.from(file.data)], { type: mimeFor(file.name) });
-    const handle = await registerMedia(sourceId, blob);
-    void storeMediaBlob(sourceId, blob);
-    void ensureProxy(sourceId);
-    const source: MediaSource = {
-      id: sourceId,
-      name: file.name,
-      url: URL.createObjectURL(blob),
-      kind: handle.info.kind,
-      duration: handle.info.duration,
-      width: handle.info.width,
-      height: handle.info.height,
-    };
-
-    const snap = mutateProject((p) => {
-      const track = tracksOfKind(p, handle.info.kind === "audio" ? "audio" : "video")[0];
-      if (!track) return p;
-      const start = trackEnd(p, track.id);
-      const duration = handle.info.kind === "image" ? IMAGE_CLIP_SECONDS : handle.info.duration;
-      return addClip(addSource(p, source), makeClip(track.id, sourceId, start, 0, duration));
-    });
-    void playbackEngine.renderStill();
-    return snap;
+    return importBlob(blob, file.name);
   },
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.addRecordedMedia",
+  title: "Add recording to timeline",
+  editor: "video",
+  schema: z.object({ blob: z.instanceof(Blob), name: z.string() }),
+  run: ({ blob, name }) => importBlob(blob, name),
   undo: undoProject,
 });
 
