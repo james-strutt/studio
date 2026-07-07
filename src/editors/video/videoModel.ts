@@ -11,6 +11,14 @@ export interface MediaSource {
   height: number;
 }
 
+export interface ClipTransform {
+  x: number; // offset from centre, project px
+  y: number;
+  scale: number; // 1 = fitted
+  rotation: number; // degrees
+  opacity: number; // 0..1
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -19,6 +27,7 @@ export interface Clip {
   inPoint: number; // source in, seconds
   outPoint: number; // source out, seconds
   volume: number; // 0..1
+  transform?: ClipTransform;
 }
 
 export interface Track {
@@ -50,6 +59,20 @@ export function projectDuration(project: VideoProject): number {
 let counter = 0;
 const id = (p: string): string => `${p}-${(counter += 1)}`;
 export const newId = id;
+
+/** After loading a saved project, move the id counter past every id in it. */
+export function bumpIdCounterPast(project: VideoProject): void {
+  const all = [
+    project.id,
+    ...project.tracks.map((t) => t.id),
+    ...project.clips.map((c) => c.id),
+    ...project.sources.map((s) => s.id),
+  ];
+  for (const value of all) {
+    const n = Number(/-(\d+)$/.exec(value)?.[1]);
+    if (Number.isFinite(n)) counter = Math.max(counter, n);
+  }
+}
 
 /** Non-drop-frame timecode MM:SS:FF (HH: prepended past an hour). */
 export function formatTimecode(t: number, fps: number): string {

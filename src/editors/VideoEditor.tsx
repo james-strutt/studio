@@ -3,6 +3,7 @@ import "@/editors/video/video.css";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { VideoPreview } from "@/editors/video/VideoPreview";
 import { playbackEngine } from "@/editors/video/engine/playback";
+import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
 import { dispatch } from "@/commands/history";
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -14,6 +15,18 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export function VideoEditor(): JSX.Element {
   const project = useVideoStore((s) => s.project);
+
+  useEffect(() => {
+    startAutosave();
+    if (!useVideoStore.getState().project) {
+      void loadAutosave().then((restored) => {
+        if (restored && !useVideoStore.getState().project) {
+          useVideoStore.getState().setProject(restored.project);
+          void playbackEngine.renderStill();
+        }
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

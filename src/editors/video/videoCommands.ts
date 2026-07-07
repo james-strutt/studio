@@ -4,6 +4,8 @@ import { getFileService } from "@/files/fileService";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { registerMedia } from "@/editors/video/engine/mediaCache";
 import { playbackEngine } from "@/editors/video/engine/playback";
+import { storeMediaBlob, relinkProjectMedia } from "@/editors/video/videoPersistence";
+import { serialiseProject, deserialiseProject } from "@/editors/video/videoProject";
 import {
   addClip,
   addSource,
@@ -102,6 +104,7 @@ registerCommand({
     const sourceId = newId("src");
     const blob = new Blob([Uint8Array.from(file.data)], { type: mimeFor(file.name) });
     const handle = await registerMedia(sourceId, blob);
+    void storeMediaBlob(sourceId, blob);
     const source: MediaSource = {
       id: sourceId,
       name: file.name,
@@ -132,4 +135,40 @@ registerCommand({
   shortcut: "Space",
   schema: z.object({}),
   run: () => playbackEngine.togglePlay(),
+});
+
+registerCommand({
+  id: "video.saveProject",
+  title: "Save project (.studio)",
+  editor: "video",
+  schema: z.object({}),
+  run: async () => {
+    const project = useVideoStore.getState().getProject();
+    if (!project) return;
+    const json = JSON.stringify(serialiseProject(project), null, 2);
+    await getFileService().save(`${project.name}.studio`, new TextEncoder().encode(json));
+  },
+});
+
+registerCommand({
+  id: "video.openProject",
+  title: "Open project (.studio)",
+  editor: "video",
+  schema: z.object({}),
+  run: async () => {
+    const file = await getFileService().open({ accept: [".studio"] });
+    if (!file) return;
+    playbackEngine.pause();
+    const data = JSON.parse(new TextDecoder().decode(file.data)) as Parameters<
+      typeof deserialiseProject
+    >[0];
+    const { project, missing } = await relinkProjectMedia(deserialiseProject(data));
+    useVideoStore.getState().setProject(project);
+    useVideoStore.getState().setPlayhead(0);
+    void playbackEngine.renderStill();
+    if (missing.length) {
+      // ponytail: native alert; swap for a themed relink dialog when relinking lands
+      alert(`Missing media (clips render black until re-imported):\n${missing.join("\n")}`);
+    }
+  },
 });
