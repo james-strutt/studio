@@ -4,6 +4,8 @@ import {
   BlobSource,
   CanvasSink,
   Input,
+  type InputAudioTrack,
+  type InputVideoTrack,
 } from "mediabunny";
 import type { MediaKind } from "@/editors/video/videoModel";
 
@@ -21,6 +23,8 @@ export interface MediaHandle {
   input: Input | null;
   video: CanvasSink | null;
   audio: AudioBufferSink | null;
+  videoTrack: InputVideoTrack | null;
+  audioTrack: InputAudioTrack | null;
   bitmap: ImageBitmap | null;
   /** 720p playback proxy (attached by engine/proxy.ts once generated). */
   proxy: CanvasSink | null;
@@ -38,6 +42,8 @@ async function openMedia(id: string, blob: Blob): Promise<MediaHandle> {
       input: null,
       video: null,
       audio: null,
+      videoTrack: null,
+      audioTrack: null,
       bitmap,
       proxy: null,
     };
@@ -60,6 +66,8 @@ async function openMedia(id: string, blob: Blob): Promise<MediaHandle> {
     input,
     video: videoTrack ? new CanvasSink(videoTrack, { poolSize: 2 }) : null,
     audio: audioTrack ? new AudioBufferSink(audioTrack) : null,
+    videoTrack,
+    audioTrack,
     bitmap: null,
     proxy: null,
   };

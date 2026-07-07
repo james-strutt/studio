@@ -13,6 +13,11 @@ export interface RecordingState {
   stop: () => void;
 }
 
+export interface ExportStatus {
+  progress: number; // 0..1
+  cancel: () => void;
+}
+
 interface VideoStore {
   project: VideoProject | null;
   playhead: number; // seconds
@@ -23,6 +28,7 @@ interface VideoStore {
   mode: VideoMode;
   showSafeAreas: boolean;
   recording: RecordingState | null;
+  exportStatus: ExportStatus | null;
   createProject: () => void;
   setProject: (p: VideoProject) => void;
   setPlayhead: (t: number) => void;
@@ -33,6 +39,7 @@ interface VideoStore {
   setMode: (mode: VideoMode) => void;
   setShowSafeAreas: (b: boolean) => void;
   setRecording: (r: RecordingState | null) => void;
+  setExportStatus: (s: ExportStatus | null) => void;
   getProject: () => VideoProject | null;
 }
 
@@ -46,6 +53,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   mode: "storyboard",
   showSafeAreas: false,
   recording: null,
+  exportStatus: null,
   createProject: () => set({ project: emptyProject(), playhead: 0, selectedClipId: null }),
   setProject: (project) => set({ project }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
@@ -57,5 +65,6 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   setMode: (mode) => set({ mode }),
   setShowSafeAreas: (showSafeAreas) => set({ showSafeAreas }),
   setRecording: (recording) => set({ recording }),
+  setExportStatus: (exportStatus) => set({ exportStatus }),
   getProject: () => get().project,
 }));

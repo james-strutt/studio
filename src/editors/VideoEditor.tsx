@@ -8,6 +8,7 @@ import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
 import { startRecording, type RecordKind } from "@/editors/video/recorder";
 import { ClipTextDialog, ClipMotionDialog } from "@/editors/video/ClipDialogs";
+import { VideoExportDialog } from "@/editors/video/VideoExportDialog";
 import { previousAbutting } from "@/editors/video/videoModel";
 import { dispatch } from "@/commands/history";
 
@@ -53,6 +54,19 @@ function RecordControls(): JSX.Element {
         </button>
       ))}
     </>
+  );
+}
+
+function ExportChip(): JSX.Element | null {
+  const exportStatus = useVideoStore((s) => s.exportStatus);
+  if (!exportStatus) return null;
+  return (
+    <span className="vid-chip">
+      Export · {Math.round(exportStatus.progress * 100)}%{" "}
+      <button className="vid-chip-x" aria-label="Cancel export" onClick={() => exportStatus.cancel()}>
+        ✕
+      </button>
+    </span>
   );
 }
 
@@ -207,6 +221,7 @@ export function VideoEditor(): JSX.Element {
   const project = useVideoStore((s) => s.project);
   const mode = useVideoStore((s) => s.mode);
   const setMode = useVideoStore((s) => s.setMode);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     startAutosave();
@@ -304,6 +319,12 @@ export function VideoEditor(): JSX.Element {
             </select>
           </>
         )}
+        {project && (
+          <button className="btn btn-quiet" onClick={() => setExportOpen(true)}>
+            Export…
+          </button>
+        )}
+        <ExportChip />
         <ProxyChip />
         {project && (
           <span className="vid-project-meta">
@@ -311,6 +332,7 @@ export function VideoEditor(): JSX.Element {
           </span>
         )}
       </div>
+      {exportOpen && <VideoExportDialog onClose={() => setExportOpen(false)} />}
       {project ? (
         <>
           <VideoPreview />

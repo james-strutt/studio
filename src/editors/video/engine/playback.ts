@@ -3,23 +3,18 @@ import { useVideoStore } from "@/editors/video/useVideoStore";
 import {
   clipAt,
   clipEnd,
-  clipProgress,
   clipSpeed,
   previousAbutting,
   projectDuration,
   sourceTimeAt,
   trackAudible,
-  tracksOfKind,
   transitionProgress,
   transitionTail,
   type Clip,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { getMedia } from "@/editors/video/engine/mediaCache";
-import { drawClipText } from "@/editors/video/engine/renderMath";
-import { computeDrawSpec, paintSpec } from "@/editors/video/engine/clipRender";
-
-type FrameSource = ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
+import { paintProjectFrame, type FrameSource } from "@/editors/video/engine/compositor";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -366,100 +361,10 @@ class PlaybackEngine {
     this.players.set(clip.id, { video, audio });
   }
 
-  /** Draw one clip (media frame + title text) with a transition effect applied. */
-  private paintOne(
-    ctx: CanvasRenderingContext2D,
-    project: VideoProject,
-    clip: Clip,
-    t: number,
-    frameFor: (clip: Clip) => FrameSource | null,
-    alphaMult = 1,
-    dxExtra = 0,
-  ): void {
-    const frame = frameFor(clip);
-    if (frame) {
-      const spec = computeDrawSpec(
-        clip,
-        frame.width,
-        frame.height,
-        project.width,
-        project.height,
-        clipProgress(clip, t),
-      );
-      paintSpec(ctx, frame, spec, alphaMult, dxExtra);
-    }
-    if (clip.text) {
-      ctx.save();
-      ctx.globalAlpha = alphaMult;
-      ctx.translate(dxExtra, 0);
-      drawClipText(ctx, clip.text, project.width, project.height);
-      ctx.restore();
-    }
-  }
-
-  /** Cover-scaled, blurred copy of the frame behind letterboxed base footage. */
-  private paintBlurFill(
-    ctx: CanvasRenderingContext2D,
-    project: VideoProject,
-    frame: FrameSource,
-  ): void {
-    const scale = Math.max(project.width / frame.width, project.height / frame.height);
-    const w = frame.width * scale;
-    const h = frame.height * scale;
-    ctx.save();
-    ctx.filter = "blur(40px)";
-    ctx.drawImage(frame, (project.width - w) / 2, (project.height - h) / 2, w, h);
-    ctx.restore();
-  }
-
-  /** Composite all visual tracks at time t (bottom track first), honouring transitions. */
-  private paintTracks(
-    ctx: CanvasRenderingContext2D,
-    project: VideoProject,
-    t: number,
-    frameFor: (clip: Clip) => FrameSource | null,
-  ): void {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, project.width, project.height);
-    const baseTrackId = tracksOfKind(project, "video")[0]?.id;
-    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
-      const incoming = clipAt(project, track.id, t);
-      if (!incoming) continue;
-      if (project.fill === "blur" && track.id === baseTrackId) {
-        const frame = frameFor(incoming);
-        if (frame) {
-          const fits =
-            Math.abs(frame.width / frame.height - project.width / project.height) < 0.01;
-          if (!fits) this.paintBlurFill(ctx, project, frame);
-        }
-      }
-      const p = transitionProgress(incoming, t);
-      if (p === null) {
-        this.paintOne(ctx, project, incoming, t, frameFor);
-        continue;
-      }
-      const prev = previousAbutting(project, incoming);
-      if (prev) this.paintOne(ctx, project, prev, t, frameFor);
-      const type = incoming.transition?.type;
-      if (type === "wipe") {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, project.width * p, project.height);
-        ctx.clip();
-        this.paintOne(ctx, project, incoming, t, frameFor);
-        ctx.restore();
-      } else if (type === "slide") {
-        this.paintOne(ctx, project, incoming, t, frameFor, 1, (1 - p) * project.width);
-      } else {
-        this.paintOne(ctx, project, incoming, t, frameFor, p); // dissolve
-      }
-    }
-  }
-
   private drawFrame(project: VideoProject, t: number): void {
     const ctx = this.ctx;
     if (!ctx || !this.canvas) return;
-    this.paintTracks(ctx, project, t, (clip) => {
+    paintProjectFrame(ctx, project, t, (clip) => {
       const handle = getMedia(clip.sourceId);
       if (!handle) return null;
       return handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null;
@@ -495,7 +400,7 @@ class PlaybackEngine {
       if (wrapped) frames.set(clip.id, wrapped.canvas);
     }
     if (token !== this.stillToken) return;
-    this.paintTracks(ctx, project, t, (clip) => frames.get(clip.id) ?? null);
+    paintProjectFrame(ctx, project, t, (clip) => frames.get(clip.id) ?? null);
   }
 }
 

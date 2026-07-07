@@ -5,6 +5,7 @@ import { useVideoStore } from "@/editors/video/useVideoStore";
 import { registerMedia } from "@/editors/video/engine/mediaCache";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { ensureProxy } from "@/editors/video/engine/proxy";
+import { exportProject, pickCodec, type ExportOptions } from "@/editors/video/engine/exporter";
 import { storeMediaBlob, relinkProjectMedia } from "@/editors/video/videoPersistence";
 import { serialiseProject, deserialiseProject } from "@/editors/video/videoProject";
 import {
@@ -540,6 +541,69 @@ registerCommand({
     return snap;
   },
   undo: undoProject,
+});
+
+export const EXPORT_PRESETS: Record<
+  string,
+  { label: string; width: number; height: number; videoBitrate: number }
+> = {
+  "1080p": { label: "1080p (Teams / email)", width: 1920, height: 1080, videoBitrate: 8_000_000 },
+  "4k": { label: "YouTube 4K", width: 3840, height: 2160, videoBitrate: 36_000_000 },
+  social: { label: "Social 9:16", width: 1080, height: 1920, videoBitrate: 10_000_000 },
+  project: { label: "Match project", width: 0, height: 0, videoBitrate: 0 },
+};
+
+export function resolveExportOptions(
+  preset: string,
+  codec: ExportOptions["codec"],
+  project: VideoProject,
+): ExportOptions {
+  const p = EXPORT_PRESETS[preset] ?? EXPORT_PRESETS["1080p"];
+  const width = p.width || project.width;
+  const height = p.height || project.height;
+  const videoBitrate =
+    p.videoBitrate || Math.round(8_000_000 * ((width * height) / (1920 * 1080)));
+  return { width, height, codec, videoBitrate, audioBitrate: 160_000 };
+}
+
+registerCommand({
+  id: "video.export",
+  title: "Export video (MP4)",
+  editor: "video",
+  schema: z.object({
+    preset: z.enum(["1080p", "4k", "social", "project"]).default("1080p"),
+    codec: z.enum(["avc", "vp9", "av1"]).optional(),
+  }),
+  run: async ({ preset, codec }) => {
+    const store = useVideoStore.getState();
+    const project = store.getProject();
+    if (!project || store.exportStatus) return;
+    playbackEngine.pause();
+    const base = EXPORT_PRESETS[preset];
+    const usable = await pickCodec(base.width || project.width, base.height || project.height);
+    const chosen = codec && usable.includes(codec) ? codec : usable[0];
+    if (!chosen) {
+      alert("No hardware-encodable codec available for this resolution in this browser.");
+      return;
+    }
+    const opts = resolveExportOptions(preset, chosen, project);
+    const state = { progress: 0, cancelled: false };
+    const cancel = (): void => {
+      state.cancelled = true;
+    };
+    useVideoStore.getState().setExportStatus({ progress: 0, cancel });
+    try {
+      const bytes = await exportProject(
+        project,
+        opts,
+        (progress) => useVideoStore.getState().setExportStatus({ progress, cancel }),
+        state,
+      );
+      if (bytes) await getFileService().save(`${project.name}.mp4`, bytes);
+    } finally {
+      useVideoStore.getState().setExportStatus(null);
+    }
+  },
 });
 
 registerCommand({

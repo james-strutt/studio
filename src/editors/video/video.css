@@ -116,6 +116,28 @@
   border-color: #dc2626;
 }
 
+.vid-chip-x {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.vid-export-progress {
+  height: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.vid-export-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms linear;
+}
+
 .vid-volume {
   display: flex;
   align-items: center;

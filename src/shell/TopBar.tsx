@@ -1,6 +1,7 @@
 import { useShellStore, type EditorId } from "@/store/useShellStore";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 import { useImageStore } from "@/editors/image/useImageStore";
+import { useVideoStore } from "@/editors/video/useVideoStore";
 import { dispatch } from "@/commands/history";
 
 const EDITORS: { id: EditorId; label: string }[] = [
@@ -13,12 +14,15 @@ export function TopBar(): JSX.Element {
   const active = useShellStore((s) => s.activeEditor);
   const activePdf = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
   const hasImageDoc = useImageStore((s) => !!s.doc);
+  const hasVideoProject = useVideoStore((s) => !!s.project);
   const canSave = active === "pdf" && !!activePdf;
-  const canExport = canSave || (active === "image" && hasImageDoc);
+  const canExport =
+    canSave || (active === "image" && hasImageDoc) || (active === "video" && hasVideoProject);
 
   const onExport = (): void => {
     if (active === "pdf" && activePdf) void dispatch("pdf.save", {});
     else if (active === "image" && hasImageDoc) void dispatch("image.exportImage", {});
+    else if (active === "video" && hasVideoProject) void dispatch("video.export", {});
   };
 
   return (
