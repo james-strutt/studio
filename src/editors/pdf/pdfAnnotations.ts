@@ -3,9 +3,9 @@ import {
   PDFName,
   PDFString,
   PDFDict,
+  PDFRef,
   StandardFonts,
   type PDFPage,
-  type PDFRef,
 } from "pdf-lib";
 
 type Bytes = Uint8Array;
@@ -460,6 +460,80 @@ export async function addFreeText(
   return pdf.save();
 }
 
+export type MeasureKind = "distance" | "perimeter" | "area";
+
+/**
+ * A measurement annotation: draws the geometry (line / open polyline / closed
+ * polygon) plus a baked value label, and stores the label in /Contents.
+ * `points` is a flat [x,y,…] array in PDF points.
+ */
+export async function addMeasurement(
+  bytes: Bytes,
+  pageIndex: number,
+  kind: MeasureKind,
+  points: number[],
+  label: string,
+  color: RGB,
+  width: number,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const xs = points.filter((_, i) => i % 2 === 0);
+  const ys = points.filter((_, i) => i % 2 === 1);
+
+  // Label anchor: midpoint (distance), centroid (area), last vertex (perimeter).
+  let lx: number;
+  let ly: number;
+  if (kind === "distance") {
+    lx = (points[0] + points[2]) / 2 + 4;
+    ly = (points[1] + points[3]) / 2 + 4;
+  } else if (kind === "area") {
+    lx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    ly = ys.reduce((a, b) => a + b, 0) / ys.length;
+  } else {
+    lx = points[points.length - 2] + 4;
+    ly = points[points.length - 1] + 4;
+  }
+  const fontSize = 10;
+  const labelW = font.widthOfTextAtSize(label, fontSize);
+
+  const pad = width + 4;
+  const bbox: Rect = [
+    Math.min(Math.min(...xs), lx) - pad,
+    Math.min(Math.min(...ys), ly) - pad,
+    Math.max(Math.max(...xs), lx + labelW) + pad,
+    Math.max(Math.max(...ys), ly + fontSize) + pad,
+  ];
+
+  let c = strokeSetup(color, width);
+  for (let i = 0; i < points.length; i += 2) {
+    c += `${fmt(points[i])} ${fmt(points[i + 1])} ${i === 0 ? "m" : "l"} `;
+  }
+  if (kind === "area") c += "h ";
+  c += "S\n";
+  // White label backing for legibility, then the value text.
+  c += `1 1 1 rg\n${fmt(lx - 2)} ${fmt(ly - 2)} ${fmt(labelW + 4)} ${fmt(fontSize + 4)} re\nf\n`;
+  c += `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg\n`;
+  c += `BT\n/F0 ${fmt(fontSize)} Tf\n${fmt(lx)} ${fmt(ly)} Td\n(${escPdfText(label)}) Tj\nET\n`;
+
+  const apRef = makeAppearance(pdf, bbox, c, { Font: { F0: font.ref } });
+  const subtype = kind === "distance" ? "Line" : kind === "area" ? "Polygon" : "PolyLine";
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: subtype,
+    Rect: bbox,
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+    BS: { W: width },
+  });
+  if (kind === "distance") annot.set(PDFName.of("L"), pdf.context.obj(points));
+  else annot.set(PDFName.of("Vertices"), pdf.context.obj(points));
+  finishAnnotation(pdf, annot, apRef, { contents: label });
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
 /** Text stamp (/Stamp) — a bordered label like "APPROVED", centred in `rect`. */
 export async function addStampText(
   bytes: Bytes,
@@ -519,6 +593,59 @@ export async function addStampImage(
     F: F_PRINT,
   });
   finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+const F_HIDDEN = 2; // annotation flag: hide from page display (replies live in the panel)
+
+/** Add a reply (/Text with /IRT) to a parent annotation, hidden from the page. */
+export async function addReply(
+  bytes: Bytes,
+  pageIndex: number,
+  parent: { obj: number; gen: number },
+  contents: string,
+  author = "You",
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Text",
+    Rect: [0, 0, 0, 0],
+    IRT: PDFRef.of(parent.obj, parent.gen),
+    ReplyType: "R",
+    F: F_HIDDEN,
+  });
+  annot.set(PDFName.of("Contents"), PDFString.of(contents));
+  annot.set(PDFName.of("T"), PDFString.of(author));
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/**
+ * Set a review state on an annotation by appending a state reply
+ * (/StateModel Review, /State), the PDF-standard way to mark resolved/reopened.
+ */
+export async function setAnnotState(
+  bytes: Bytes,
+  pageIndex: number,
+  parent: { obj: number; gen: number },
+  state: "Completed" | "None",
+  author = "You",
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Text",
+    Rect: [0, 0, 0, 0],
+    IRT: PDFRef.of(parent.obj, parent.gen),
+    StateModel: "Review",
+    F: F_HIDDEN,
+  });
+  annot.set(PDFName.of("State"), PDFString.of(state));
+  annot.set(PDFName.of("T"), PDFString.of(author));
   appendAnnotation(pdf, page, annot);
   return pdf.save();
 }

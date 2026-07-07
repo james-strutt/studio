@@ -472,6 +472,112 @@
   gap: var(--space-2);
 }
 
+.pdf-cal-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.pdf-cal-unit {
+  max-width: 72px;
+}
+
+.pdf-annot-scale {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ---- comments panel ---- */
+.pdf-comments {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-comments-filters {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.pdf-comments-filters .input {
+  font-size: var(--text-xs);
+  padding: 4px 6px;
+}
+
+.pdf-comments-list {
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pdf-comment {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.pdf-comment-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.pdf-comment-page {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pdf-comment-type {
+  color: var(--ink-3);
+  text-transform: lowercase;
+}
+
+.pdf-comment-author {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.pdf-comment-body {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.pdf-comment-reply {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  margin: 2px 0 0 var(--space-3);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--line-strong);
+}
+
+.pdf-comment-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.pdf-comment-actions .btn {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+}
+
+.pdf-comment-replybox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
 .pdf-poly-finish {
   position: absolute;
   left: var(--space-2);

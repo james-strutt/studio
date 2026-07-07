@@ -2,13 +2,25 @@ import { useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
 import { usePdfStore, type AnnotTool } from "@/editors/pdf/pdfStore";
 import { ANNOT_COLORS, DEFAULT_ANNOT_COLOR } from "@/editors/pdf/annotColors";
+import { pathLength, polygonArea, formatMeasure } from "@/editors/pdf/measureMath";
 
 interface Pt {
   x: number;
   y: number;
 }
 
-const DRAG_TOOLS: AnnotTool[] = ["ink", "rect", "ellipse", "line", "arrow", "text"];
+const DRAG_TOOLS: AnnotTool[] = [
+  "ink",
+  "rect",
+  "ellipse",
+  "line",
+  "arrow",
+  "text",
+  "calibrate",
+  "distance",
+];
+const isPolyTool = (t: AnnotTool): boolean =>
+  t === "polygon" || t === "perimeter" || t === "area";
 
 export function PdfDrawOverlay({
   pageIndex,
@@ -31,8 +43,14 @@ export function PdfDrawOverlay({
   const [ink, setInk] = useState<Pt[]>([]);
   const [verts, setVerts] = useState<Pt[]>([]);
   const [cursor, setCursor] = useState<Pt | null>(null);
-  const [popup, setPopup] = useState<{ kind: "note" | "text"; box: number[] } | null>(null);
+  const [popup, setPopup] = useState<{
+    kind: "note" | "text" | "calibrate";
+    box: number[];
+    pdfLen?: number;
+  } | null>(null);
   const [text, setText] = useState("");
+  const [calLen, setCalLen] = useState("");
+  const [calUnit, setCalUnit] = useState("m");
 
   const rgb = color.rgb;
   const strokePx = Math.max(1, widthPt * scale);
@@ -56,7 +74,7 @@ export function PdfDrawOverlay({
 
   const onPointerMove = (e: React.PointerEvent): void => {
     const p = local(e);
-    if (tool === "polygon") {
+    if (isPolyTool(tool)) {
       setCursor(p);
       return;
     }
@@ -108,6 +126,24 @@ export function PdfDrawOverlay({
         width: widthPt,
         arrow: tool === "arrow",
       });
+    } else if (tool === "calibrate") {
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 6) return;
+      const pdfLen = Math.hypot(b.x - a.x, b.y - a.y) / scale;
+      setCalLen("");
+      setPopup({ kind: "calibrate", box: [b.x, b.y], pdfLen });
+    } else if (tool === "distance") {
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 3) return;
+      const points = [toX(a.x), toY(a.y), toX(b.x), toY(b.y)];
+      const cal = usePdfStore.getState().getActive()?.calibration ?? null;
+      const label = formatMeasure(pathLength(points), "distance", cal);
+      void dispatch("pdf.addMeasurement", {
+        pageIndex,
+        kind: "distance",
+        points,
+        label,
+        color: rgb,
+        width: widthPt,
+      });
     } else if (tool === "text") {
       const box =
         nx1 - nx0 < 12 || ny1 - ny0 < 12 ? [nx0, ny0, nx0 + 160, ny0 + 60] : [nx0, ny0, nx1, ny1];
@@ -121,28 +157,61 @@ export function PdfDrawOverlay({
       const p = local(e);
       setText("");
       setPopup({ kind: "note", box: [p.x, p.y] });
-    } else if (tool === "polygon") {
+    } else if (isPolyTool(tool)) {
       setVerts((v) => [...v, local(e)]);
     }
   };
 
   const closePolygon = (): void => {
-    if (verts.length >= 3) {
+    const min = tool === "area" ? 3 : 2;
+    if (verts.length >= min) {
       const flat = verts.flatMap((q) => [toX(q.x), toY(q.y)]);
-      void dispatch("pdf.addPolygon", {
-        pageIndex,
-        vertices: flat,
-        color: rgb,
-        width: widthPt,
-        fill: fillOn ? rgb : null,
-      });
+      if (tool === "polygon") {
+        void dispatch("pdf.addPolygon", {
+          pageIndex,
+          vertices: flat,
+          color: rgb,
+          width: widthPt,
+          fill: fillOn ? rgb : null,
+        });
+      } else {
+        const cal = usePdfStore.getState().getActive()?.calibration ?? null;
+        const kind = tool === "area" ? "area" : "perimeter";
+        const raw = kind === "area" ? polygonArea(flat) : pathLength(flat);
+        void dispatch("pdf.addMeasurement", {
+          pageIndex,
+          kind,
+          points: flat,
+          label: formatMeasure(raw, kind, cal),
+          color: rgb,
+          width: widthPt,
+        });
+      }
     }
     setVerts([]);
     setCursor(null);
   };
 
+  const submitCalibration = (): void => {
+    if (!popup?.pdfLen) return;
+    const real = Number(calLen);
+    const activeId = usePdfStore.getState().activeId;
+    if (activeId && real > 0) {
+      usePdfStore.getState().setCalibration(activeId, {
+        unit: calUnit.trim() || "u",
+        pointsPerUnit: popup.pdfLen / real,
+      });
+    }
+    setPopup(null);
+    usePdfStore.getState().setAnnotTool("select");
+  };
+
   const submitPopup = (): void => {
     if (!popup) return;
+    if (popup.kind === "calibrate") {
+      submitCalibration();
+      return;
+    }
     if (popup.kind === "note") {
       const [x, y] = popup.box;
       void dispatch("pdf.addNote", {
@@ -202,7 +271,7 @@ export function PdfDrawOverlay({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onClick={onClick}
-      onDoubleClick={tool === "polygon" ? closePolygon : undefined}
+      onDoubleClick={isPolyTool(tool) ? closePolygon : undefined}
     >
       <svg
         className="pdf-draw-svg"
@@ -217,31 +286,55 @@ export function PdfDrawOverlay({
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <textarea
-            className="input"
-            autoFocus
-            rows={3}
-            placeholder={popup.kind === "note" ? "Note…" : "Text…"}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
+          {popup.kind === "calibrate" ? (
+            <>
+              <span className="field-hint">This line equals…</span>
+              <div className="pdf-cal-row">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step="any"
+                  autoFocus
+                  placeholder="length"
+                  value={calLen}
+                  onChange={(e) => setCalLen(e.target.value)}
+                />
+                <input
+                  className="input pdf-cal-unit"
+                  placeholder="unit"
+                  value={calUnit}
+                  onChange={(e) => setCalUnit(e.target.value)}
+                />
+              </div>
+            </>
+          ) : (
+            <textarea
+              className="input"
+              autoFocus
+              rows={3}
+              placeholder={popup.kind === "note" ? "Note…" : "Text…"}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          )}
           <div className="pdf-annot-popup-actions">
             <button className="btn btn-quiet" onClick={() => setPopup(null)}>
               Cancel
             </button>
             <button className="btn btn-primary" onClick={submitPopup}>
-              Add
+              {popup.kind === "calibrate" ? "Set scale" : "Add"}
             </button>
           </div>
         </div>
       )}
-      {tool === "polygon" && verts.length >= 3 && (
+      {isPolyTool(tool) && verts.length >= (tool === "area" ? 3 : 2) && (
         <button
           className="btn btn-primary pdf-poly-finish"
           onClick={closePolygon}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          Finish polygon
+          Finish
         </button>
       )}
     </div>

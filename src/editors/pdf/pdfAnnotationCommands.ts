@@ -11,6 +11,9 @@ import {
   addFreeText,
   addStampText,
   addStampImage,
+  addMeasurement,
+  addReply,
+  setAnnotState,
 } from "@/editors/pdf/pdfAnnotations";
 
 const rgbSchema = z.object({ r: z.number(), g: z.number(), b: z.number() });
@@ -164,5 +167,47 @@ registerCommand({
   }),
   run: ({ pageIndex, rect, bytes, isPng }) =>
     mutateActive((doc) => addStampImage(doc, pageIndex, rect, bytes, isPng)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.addMeasurement",
+  title: "Add measurement",
+  editor: "pdf",
+  schema: z.object({
+    pageIndex: pageIdx,
+    kind: z.enum(["distance", "perimeter", "area"]),
+    points: z.array(z.number()),
+    label: z.string(),
+    color: rgbSchema,
+    width,
+  }),
+  run: ({ pageIndex, kind, points, label, color, width }) =>
+    mutateActive((bytes) => addMeasurement(bytes, pageIndex, kind, points, label, color, width)),
+  undo: undoMutation,
+});
+
+const parentSchema = z.object({
+  pageIndex: pageIdx,
+  parent: z.object({ obj: z.number().int(), gen: z.number().int() }),
+});
+
+registerCommand({
+  id: "pdf.addReply",
+  title: "Reply to comment",
+  editor: "pdf",
+  schema: parentSchema.extend({ contents: z.string() }),
+  run: ({ pageIndex, parent, contents }) =>
+    mutateActive((bytes) => addReply(bytes, pageIndex, parent, contents)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.setCommentState",
+  title: "Resolve or reopen comment",
+  editor: "pdf",
+  schema: parentSchema.extend({ state: z.enum(["Completed", "None"]) }),
+  run: ({ pageIndex, parent, state }) =>
+    mutateActive((bytes) => setAnnotState(bytes, pageIndex, parent, state)),
   undo: undoMutation,
 });

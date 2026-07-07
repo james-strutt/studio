@@ -14,6 +14,13 @@ const TOOLS: { id: AnnotTool; label: string; glyph: string }[] = [
   { id: "text", label: "Text box", glyph: "T" },
 ];
 
+const MEASURE_TOOLS: { id: AnnotTool; label: string; glyph: string }[] = [
+  { id: "calibrate", label: "Calibrate scale", glyph: "⚖" },
+  { id: "distance", label: "Distance", glyph: "↔" },
+  { id: "perimeter", label: "Perimeter", glyph: "⟌" },
+  { id: "area", label: "Area", glyph: "▱" },
+];
+
 const WIDTHS = [1, 2, 4, 6];
 
 export function PdfAnnotToolbar(): JSX.Element {
@@ -21,6 +28,7 @@ export function PdfAnnotToolbar(): JSX.Element {
   const colorId = usePdfStore((s) => s.annotColorId);
   const annotWidth = usePdfStore((s) => s.annotWidth);
   const fill = usePdfStore((s) => s.annotFill);
+  const calibration = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId)?.calibration);
   const setTool = usePdfStore((s) => s.setAnnotTool);
   const setColor = usePdfStore((s) => s.setAnnotColorId);
   const setWidth = usePdfStore((s) => s.setAnnotWidth);
@@ -73,6 +81,23 @@ export function PdfAnnotToolbar(): JSX.Element {
       </button>
       <span className="pdf-toolbar-sep" aria-hidden="true" />
       <PdfStampMenu />
+      <span className="pdf-toolbar-sep" aria-hidden="true" />
+      <div className="seg" role="group" aria-label="Measure">
+        {MEASURE_TOOLS.map((t) => (
+          <button
+            key={t.id}
+            aria-pressed={tool === t.id}
+            title={t.label}
+            aria-label={t.label}
+            onClick={() => setTool(t.id)}
+          >
+            {t.glyph}
+          </button>
+        ))}
+      </div>
+      <span className="pdf-annot-scale" title="Measurement scale">
+        {calibration ? `1 ${calibration.unit} = ${Math.round(calibration.pointsPerUnit)} pt` : "uncalibrated"}
+      </span>
     </div>
   );
 }

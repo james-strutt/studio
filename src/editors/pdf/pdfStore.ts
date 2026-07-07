@@ -4,7 +4,7 @@ import { loadPdf, type PageSize } from "@/editors/pdf/pdfDocument";
 
 export type ZoomMode = "fit-width" | "fit-page" | "actual" | "custom";
 export type ViewMode = "single" | "two-up" | "spread";
-export type SidebarTab = "thumbnails" | "outline" | "search";
+export type SidebarTab = "thumbnails" | "outline" | "search" | "comments";
 export type AnnotTool =
   | "select"
   | "ink"
@@ -14,7 +14,11 @@ export type AnnotTool =
   | "arrow"
   | "polygon"
   | "note"
-  | "text";
+  | "text"
+  | "calibrate"
+  | "distance"
+  | "perimeter"
+  | "area";
 
 export interface PdfDoc {
   id: string;
@@ -31,6 +35,13 @@ export interface PdfDoc {
   currentPage: number;
   viewMode: ViewMode;
   darkPage: boolean;
+  calibration: MeasureCalibration | null;
+}
+
+/** Points-per-unit scale for measurement tools, e.g. { unit: "m", pointsPerUnit: 42.3 }. */
+export interface MeasureCalibration {
+  unit: string;
+  pointsPerUnit: number;
 }
 
 interface PdfStore {
@@ -47,6 +58,7 @@ interface PdfStore {
   setAnnotColorId: (id: string) => void;
   setAnnotWidth: (w: number) => void;
   setAnnotFill: (fill: boolean) => void;
+  setCalibration: (id: string, cal: MeasureCalibration | null) => void;
   openBytes: (name: string, bytes: Uint8Array) => Promise<string>;
   replaceBytes: (id: string, bytes: Uint8Array) => Promise<void>;
   markSaved: (id: string, name?: string) => void;
@@ -84,6 +96,8 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
   setAnnotColorId: (annotColorId) => set({ annotColorId }),
   setAnnotWidth: (annotWidth) => set({ annotWidth }),
   setAnnotFill: (annotFill) => set({ annotFill }),
+  setCalibration: (id, calibration) =>
+    set((s) => ({ docs: patchDoc(s.docs, id, { calibration }) })),
 
   async openBytes(name, bytes) {
     const { doc, pageSizes } = await loadPdf(bytes);
@@ -103,6 +117,7 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
       currentPage: 1,
       viewMode: "single",
       darkPage: false,
+      calibration: null,
     };
     set((s) => ({ docs: [...s.docs, entry], activeId: id }));
     return id;

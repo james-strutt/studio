@@ -2,11 +2,13 @@ import { usePdfStore, type PdfDoc, type SidebarTab } from "@/editors/pdf/pdfStor
 import { PdfThumbnails } from "@/editors/pdf/PdfThumbnails";
 import { PdfOutline } from "@/editors/pdf/PdfOutline";
 import { PdfSearch } from "@/editors/pdf/PdfSearch";
+import { PdfComments } from "@/editors/pdf/PdfComments";
 
 const TABS: { id: SidebarTab; label: string }[] = [
   { id: "thumbnails", label: "Pages" },
   { id: "outline", label: "Outline" },
   { id: "search", label: "Search" },
+  { id: "comments", label: "Comments" },
 ];
 
 export function PdfSidebar({ doc }: { doc: PdfDoc }): JSX.Element {
@@ -31,6 +33,7 @@ export function PdfSidebar({ doc }: { doc: PdfDoc }): JSX.Element {
         {sidebar === "thumbnails" && <PdfThumbnails doc={doc} />}
         {sidebar === "outline" && <PdfOutline doc={doc} />}
         {sidebar === "search" && <PdfSearch doc={doc} />}
+        {sidebar === "comments" && <PdfComments doc={doc} />}
       </div>
     </aside>
   );
