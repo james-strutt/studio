@@ -19,6 +19,14 @@ export interface ClipTransform {
   opacity: number; // 0..1
 }
 
+export interface ClipText {
+  content: string;
+  size: number; // px at project resolution
+  color: string;
+  x: number; // 0..1 of project width (centre of text)
+  y: number; // 0..1 of project height (baseline anchor)
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -28,6 +36,11 @@ export interface Clip {
   outPoint: number; // source out, seconds
   volume: number; // 0..1
   transform?: ClipTransform;
+  text?: ClipText;
+}
+
+export function makeClipText(content: string): ClipText {
+  return { content, size: 64, color: "#FFFFFF", x: 0.5, y: 0.82 };
 }
 
 export interface Track {
@@ -315,4 +328,60 @@ export function addSource(project: VideoProject, source: MediaSource): VideoProj
 /** Tracks of the given kinds in render order (array order = bottom first). */
 export function tracksOfKind(project: VideoProject, ...kinds: TrackKind[]): Track[] {
   return project.tracks.filter((t) => kinds.includes(t.kind));
+}
+
+export function setClipText(project: VideoProject, clipId: string, text: ClipText | null): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => (c.id === clipId ? { ...c, text: text ?? undefined } : c)),
+  };
+}
+
+/** Clips of one track in start order. */
+export function trackClips(project: VideoProject, trackId: string): Clip[] {
+  return project.clips.filter((c) => c.trackId === trackId).sort((a, b) => a.start - b.start);
+}
+
+/** Repack a track's clips back-to-back from 0 (storyboard sequencing). */
+export function packTrack(project: VideoProject, trackId: string): VideoProject {
+  let cursor = 0;
+  const packed = new Map<string, number>();
+  for (const c of trackClips(project, trackId)) {
+    packed.set(c.id, cursor);
+    cursor += clipDuration(c);
+  }
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      const start = packed.get(c.id);
+      return start === undefined ? c : { ...c, start };
+    }),
+  };
+}
+
+/** Move a clip within its track's sequence, then repack from 0. */
+export function reorderTrack(
+  project: VideoProject,
+  trackId: string,
+  fromIndex: number,
+  toIndex: number,
+): VideoProject {
+  const clips = trackClips(project, trackId);
+  if (fromIndex < 0 || fromIndex >= clips.length) return project;
+  const order = [...clips];
+  const [moved] = order.splice(fromIndex, 1);
+  order.splice(Math.max(0, Math.min(toIndex, order.length)), 0, moved);
+  let cursor = 0;
+  const packed = new Map<string, number>();
+  for (const c of order) {
+    packed.set(c.id, cursor);
+    cursor += clipDuration(c);
+  }
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      const start = packed.get(c.id);
+      return start === undefined ? c : { ...c, start };
+    }),
+  };
 }

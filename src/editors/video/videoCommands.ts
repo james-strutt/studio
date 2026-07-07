@@ -16,10 +16,14 @@ import {
   makeClip,
   moveClip,
   newId,
+  makeClipText,
+  packTrack,
   removeClip,
   removeMarker,
+  reorderTrack,
   rippleDelete,
   rollEdit,
+  setClipText,
   setTrackMuted,
   slipClip,
   splitClip,
@@ -104,13 +108,19 @@ registerCommand({
   },
 });
 
+const AUDIO_ACCEPT = MEDIA_ACCEPT.filter((ext) =>
+  [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"].includes(ext),
+);
+
 registerCommand({
   id: "video.importMedia",
   title: "Import media (video, audio, image)",
   editor: "video",
-  schema: z.object({}),
-  run: async () => {
-    const file = await getFileService().open({ accept: MEDIA_ACCEPT });
+  schema: z.object({ kind: z.enum(["audio"]).optional() }),
+  run: async ({ kind }) => {
+    const file = await getFileService().open({
+      accept: kind === "audio" ? AUDIO_ACCEPT : MEDIA_ACCEPT,
+    });
     if (!file) return null;
     const store = useVideoStore.getState();
     if (!store.getProject()) store.createProject();
@@ -243,6 +253,44 @@ registerCommand({
   editor: "video",
   schema: z.object({ clipId: z.string(), start: z.number(), trackId: z.string().optional() }),
   run: ({ clipId, start, trackId }) => mutateProject((p) => moveClip(p, clipId, start, trackId)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setClipText",
+  title: "Set clip title text",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), content: z.string() }),
+  run: ({ clipId, content }) =>
+    mutateProject((p) => {
+      const existing = p.clips.find((c) => c.id === clipId)?.text;
+      if (!content) return setClipText(p, clipId, null);
+      return setClipText(p, clipId, existing ? { ...existing, content } : makeClipText(content));
+    }),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.reorderClip",
+  title: "Reorder clip in sequence",
+  editor: "video",
+  schema: z.object({ trackId: z.string(), fromIndex: z.number(), toIndex: z.number() }),
+  run: ({ trackId, fromIndex, toIndex }) =>
+    mutateProject((p) => reorderTrack(p, trackId, fromIndex, toIndex)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setClipDuration",
+  title: "Set clip duration (storyboard trim)",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), seconds: z.number().positive() }),
+  run: ({ clipId, seconds }) =>
+    mutateProject((p) => {
+      const clip = p.clips.find((c) => c.id === clipId);
+      if (!clip) return p;
+      return packTrack(trimClipRight(p, clipId, clip.start + seconds), clip.trackId);
+    }),
   undo: undoProject,
 });
 

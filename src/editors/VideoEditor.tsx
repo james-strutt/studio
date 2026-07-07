@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import "@/editors/video/video.css";
-import { useVideoStore, type ProxyStatus } from "@/editors/video/useVideoStore";
+import { useVideoStore, type ProxyStatus, type VideoMode } from "@/editors/video/useVideoStore";
 import { VideoPreview } from "@/editors/video/VideoPreview";
 import { Timeline } from "@/editors/video/Timeline";
+import { Storyboard } from "@/editors/video/Storyboard";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
 import { dispatch } from "@/commands/history";
@@ -58,8 +59,15 @@ function SelectedClipActions(): JSX.Element | null {
   );
 }
 
+const MODES: { id: VideoMode; label: string }[] = [
+  { id: "storyboard", label: "Storyboard" },
+  { id: "timeline", label: "Timeline" },
+];
+
 export function VideoEditor(): JSX.Element {
   const project = useVideoStore((s) => s.project);
+  const mode = useVideoStore((s) => s.mode);
+  const setMode = useVideoStore((s) => s.setMode);
 
   useEffect(() => {
     startAutosave();
@@ -105,7 +113,16 @@ export function VideoEditor(): JSX.Element {
         <button className="btn btn-quiet" onClick={() => void dispatch("video.importMedia", {})}>
           Import media
         </button>
-        <SelectedClipActions />
+        {project && (
+          <div className="seg" role="group" aria-label="Editing mode">
+            {MODES.map((m) => (
+              <button key={m.id} aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {mode === "timeline" && <SelectedClipActions />}
         <ProxyChip />
         {project && (
           <span className="vid-project-meta">
@@ -116,7 +133,7 @@ export function VideoEditor(): JSX.Element {
       {project ? (
         <>
           <VideoPreview />
-          <Timeline />
+          {mode === "timeline" ? <Timeline /> : <Storyboard />}
         </>
       ) : (
         <div className="vid-empty">

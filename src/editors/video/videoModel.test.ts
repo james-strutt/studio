@@ -20,6 +20,10 @@ import {
   slipClip,
   detachAudio,
   clipEnd,
+  reorderTrack,
+  packTrack,
+  setClipText,
+  makeClipText,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { containRect } from "@/editors/video/engine/renderMath";
@@ -148,6 +152,35 @@ describe("clip edit operations", () => {
     expect(video?.volume).toBe(0);
     expect(audio).toMatchObject({ trackId: "a1", start: 2, inPoint: 0, outPoint: 6, volume: 1 });
     expect(clipEnd(audio as never)).toBe(8);
+  });
+});
+
+describe("storyboard sequencing", () => {
+  function sequence(): VideoProject {
+    let { project } = projectWithClip(); // A: 2..8 (dur 6)
+    project = addClip(project, makeClip("v1", "s1", 8, 0, 3)); // B: dur 3
+    project = addClip(project, makeClip("v1", "s1", 11, 0, 2)); // C: dur 2
+    return project;
+  }
+
+  it("reorders and repacks back-to-back from 0", () => {
+    const out = reorderTrack(sequence(), "v1", 2, 0); // C to front
+    const packed = out.clips.map((c) => ({ start: c.start, dur: c.outPoint - c.inPoint }));
+    expect(packed.find((p) => p.dur === 2)?.start).toBe(0); // C first
+    expect(packed.find((p) => p.dur === 6)?.start).toBe(2); // A second
+    expect(packed.find((p) => p.dur === 3)?.start).toBe(8); // B last
+  });
+
+  it("packTrack closes gaps without changing order", () => {
+    const out = packTrack(sequence(), "v1");
+    expect(out.clips.map((c) => c.start)).toEqual([0, 6, 9]);
+  });
+
+  it("sets and clears clip title text", () => {
+    const { project, clipId } = projectWithClip();
+    const withText = setClipText(project, clipId, makeClipText("Hello"));
+    expect(withText.clips[0].text?.content).toBe("Hello");
+    expect(setClipText(withText, clipId, null).clips[0].text).toBeUndefined();
   });
 });
 

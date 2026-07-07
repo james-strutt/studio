@@ -9,7 +9,7 @@ import {
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { getMedia } from "@/editors/video/engine/mediaCache";
-import { containRect } from "@/editors/video/engine/renderMath";
+import { containRect, drawClipText } from "@/editors/video/engine/renderMath";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -281,15 +281,18 @@ class PlaybackEngine {
     if (!ctx || !this.canvas) return;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, project.width, project.height);
-    for (const track of tracksOfKind(project, "video", "overlay")) {
+    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
       const clip = clipAt(project, track.id, t);
       if (!clip) continue;
       const handle = getMedia(clip.sourceId);
-      if (!handle) continue;
-      const frame = handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null;
-      if (!frame) continue;
-      const r = containRect(frame.width, frame.height, project.width, project.height);
-      ctx.drawImage(frame, r.x, r.y, r.w, r.h);
+      const frame = handle
+        ? (handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null)
+        : null;
+      if (frame) {
+        const r = containRect(frame.width, frame.height, project.width, project.height);
+        ctx.drawImage(frame, r.x, r.y, r.w, r.h);
+      }
+      if (clip.text) drawClipText(ctx, clip.text, project.width, project.height);
     }
   }
 
@@ -306,29 +309,40 @@ class PlaybackEngine {
     this.canvas.height = project.height;
     const t = useVideoStore.getState().playhead;
 
-    const draws: { frame: CanvasImageSource; w: number; h: number }[] = [];
-    for (const track of tracksOfKind(project, "video", "overlay")) {
+    const draws: { frame?: CanvasImageSource; w?: number; h?: number; clip: Clip }[] = [];
+    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
       const clip = clipAt(project, track.id, t);
       if (!clip) continue;
       const handle = getMedia(clip.sourceId);
-      if (!handle) continue;
-      const sink = handle.proxy ?? handle.video;
-      if (handle.bitmap) {
-        draws.push({ frame: handle.bitmap, w: handle.bitmap.width, h: handle.bitmap.height });
+      const sink = handle ? (handle.proxy ?? handle.video) : null;
+      if (handle?.bitmap) {
+        draws.push({ frame: handle.bitmap, w: handle.bitmap.width, h: handle.bitmap.height, clip });
       } else if (sink) {
         const wrapped = await sink.getCanvas(sourceTimeAt(clip, t));
         if (token !== this.stillToken) return; // superseded by a newer seek
         if (wrapped) {
-          draws.push({ frame: wrapped.canvas, w: wrapped.canvas.width, h: wrapped.canvas.height });
+          draws.push({
+            frame: wrapped.canvas,
+            w: wrapped.canvas.width,
+            h: wrapped.canvas.height,
+            clip,
+          });
+        } else {
+          draws.push({ clip });
         }
+      } else if (clip.text) {
+        draws.push({ clip });
       }
     }
     if (token !== this.stillToken) return;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, project.width, project.height);
     for (const d of draws) {
-      const r = containRect(d.w, d.h, project.width, project.height);
-      ctx.drawImage(d.frame, r.x, r.y, r.w, r.h);
+      if (d.frame && d.w && d.h) {
+        const r = containRect(d.w, d.h, project.width, project.height);
+        ctx.drawImage(d.frame, r.x, r.y, r.w, r.h);
+      }
+      if (d.clip.text) drawClipText(ctx, d.clip.text, project.width, project.height);
     }
   }
 }

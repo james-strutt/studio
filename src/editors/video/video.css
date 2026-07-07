@@ -84,6 +84,106 @@
   justify-content: center;
 }
 
+/* ---- storyboard ---- */
+
+.sb {
+  display: flex;
+  flex-direction: column;
+  height: 208px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.sb-strip {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: var(--space-3);
+}
+
+.sb-card {
+  flex: none;
+  width: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sb-thumb-btn {
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.sb-thumb {
+  border-radius: 2px;
+}
+
+.sb-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-text {
+  font-size: var(--text-xs);
+}
+
+.sb-card-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sb-duration {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+}
+
+.sb-duration .input {
+  width: 100%;
+  min-width: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.sb-remove {
+  margin-left: auto;
+}
+
+.sb-add {
+  flex: none;
+  width: 120px;
+  height: 102px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.sb-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
 /* ---- timeline ---- */
 
 .tl {
