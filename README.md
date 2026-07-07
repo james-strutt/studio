@@ -148,6 +148,7 @@ PDF content editing (the hard tier)
 - [x] P2.10 Links & page setup: add/edit/remove hyperlinks and internal go-to-page links; page resize (A4↔Letter etc. with content scaling options); page background colour.
   - DONE (add). `pdfContent.ts`: `addLink` (URI `/Action /URI` and internal `/GoTo` go-to-page `/Link` annotations), `resizePages` (A4/Letter/Legal/A3 via pdf-lib `setSize` + optional `scaleContent`), `setPageBackground` (prepends a fill content stream so it draws **behind** existing content). Commands `pdf.addLink` / `pdf.resizePages` / `pdf.setBackground`; resize/background wired into the Page-setup dialog. Unit-tested (URI link, go-to-page link, resize, background-behind). **Interactive link drawing landed** — a Link tool in the annotation toolbar draws a box → URL popup → `pdf.addLink`. (Edit/remove of existing links not yet surfaced.)
 - [ ] P2.11 **Phase done when:** image editor handles the screenshot-annotate-export loop end to end; PDF text edit + redaction pass their ACs.
+  - STATUS: image editor screenshot→annotate→export loop is complete (P2.1–P2.5); **redaction passes its AC** (P2.7, node-verified). Blocked only on **P2.6 in-place text edit** (research-hard — no simple mupdf reflow API) and P2.9 existing-image editing. Everything else in Phase 2 is done and (where logic-bearing) unit-tested; the two open items are the genuinely hard content-stream-editing tasks.
 
 ## Phase 3 — Video editor: assemble & ship
 
