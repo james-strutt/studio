@@ -4,6 +4,7 @@ import { getFileService } from "@/files/fileService";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { registerMedia } from "@/editors/video/engine/mediaCache";
 import { playbackEngine } from "@/editors/video/engine/playback";
+import { ensureProxy } from "@/editors/video/engine/proxy";
 import { storeMediaBlob, relinkProjectMedia } from "@/editors/video/videoPersistence";
 import { serialiseProject, deserialiseProject } from "@/editors/video/videoProject";
 import {
@@ -105,6 +106,7 @@ registerCommand({
     const blob = new Blob([Uint8Array.from(file.data)], { type: mimeFor(file.name) });
     const handle = await registerMedia(sourceId, blob);
     void storeMediaBlob(sourceId, blob);
+    void ensureProxy(sourceId);
     const source: MediaSource = {
       id: sourceId,
       name: file.name,

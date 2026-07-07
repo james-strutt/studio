@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import "@/editors/video/video.css";
-import { useVideoStore } from "@/editors/video/useVideoStore";
+import { useVideoStore, type ProxyStatus } from "@/editors/video/useVideoStore";
 import { VideoPreview } from "@/editors/video/VideoPreview";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
@@ -11,6 +11,24 @@ function isTypingTarget(el: EventTarget | null): boolean {
     el instanceof HTMLElement &&
     (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
   );
+}
+
+function proxyChipLabel(statuses: ProxyStatus[]): string | null {
+  const generating = statuses.find((s) => s.state === "generating");
+  if (generating) return `Proxy · 720p · ${Math.round((generating.progress ?? 0) * 100)}%`;
+  if (statuses.some((s) => s.state === "failed")) return "Proxy · 720p · failed";
+  if (statuses.some((s) => s.state === "ready")) return "Proxy · 720p · ready";
+  return null;
+}
+
+function ProxyChip(): JSX.Element | null {
+  const project = useVideoStore((s) => s.project);
+  const proxyStatus = useVideoStore((s) => s.proxyStatus);
+  if (!project) return null;
+  const label = proxyChipLabel(
+    project.sources.map((s) => proxyStatus[s.id]).filter((s): s is ProxyStatus => Boolean(s)),
+  );
+  return label ? <span className="vid-chip">{label}</span> : null;
 }
 
 export function VideoEditor(): JSX.Element {
@@ -47,6 +65,7 @@ export function VideoEditor(): JSX.Element {
         <button className="btn btn-quiet" onClick={() => void dispatch("video.importMedia", {})}>
           Import media
         </button>
+        <ProxyChip />
         {project && (
           <span className="vid-project-meta">
             {project.width}×{project.height} · {project.fps} fps

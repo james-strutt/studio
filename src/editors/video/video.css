@@ -14,6 +14,15 @@
   margin-left: auto;
 }
 
+.vid-chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  padding: 2px var(--space-2);
+}
+
 .vid-preview {
   flex: 1;
   min-height: 0;

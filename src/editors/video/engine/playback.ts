@@ -251,8 +251,9 @@ class PlaybackEngine {
     }
     const sourceStart = sourceTimeAt(clip, t);
     const sourceNow = (): number => sourceTimeAt(clip, this.playheadNow());
-    const video = handle.video
-      ? new ClipVideoPlayer(handle.video, sourceStart, clip.outPoint, sourceNow)
+    const videoSink = handle.proxy ?? handle.video; // timeline plays proxies; export uses originals
+    const video = videoSink
+      ? new ClipVideoPlayer(videoSink, sourceStart, clip.outPoint, sourceNow)
       : null;
     const audio =
       handle.audio && !muted && this.audioCtx
@@ -281,9 +282,7 @@ class PlaybackEngine {
       if (!handle) continue;
       const frame = handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null;
       if (!frame) continue;
-      const fw = handle.bitmap ? handle.bitmap.width : handle.info.width;
-      const fh = handle.bitmap ? handle.bitmap.height : handle.info.height;
-      const r = containRect(fw, fh, project.width, project.height);
+      const r = containRect(frame.width, frame.height, project.width, project.height);
       ctx.drawImage(frame, r.x, r.y, r.w, r.h);
     }
   }
@@ -307,12 +306,15 @@ class PlaybackEngine {
       if (!clip) continue;
       const handle = getMedia(clip.sourceId);
       if (!handle) continue;
+      const sink = handle.proxy ?? handle.video;
       if (handle.bitmap) {
         draws.push({ frame: handle.bitmap, w: handle.bitmap.width, h: handle.bitmap.height });
-      } else if (handle.video) {
-        const wrapped = await handle.video.getCanvas(sourceTimeAt(clip, t));
+      } else if (sink) {
+        const wrapped = await sink.getCanvas(sourceTimeAt(clip, t));
         if (token !== this.stillToken) return; // superseded by a newer seek
-        if (wrapped) draws.push({ frame: wrapped.canvas, w: handle.info.width, h: handle.info.height });
+        if (wrapped) {
+          draws.push({ frame: wrapped.canvas, w: wrapped.canvas.width, h: wrapped.canvas.height });
+        }
       }
     }
     if (token !== this.stillToken) return;

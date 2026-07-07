@@ -1,6 +1,7 @@
 import { del, get, keys, set } from "idb-keyval";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { registerMedia } from "@/editors/video/engine/mediaCache";
+import { ensureProxy } from "@/editors/video/engine/proxy";
 import {
   serialiseProject,
   deserialiseProject,
@@ -10,6 +11,7 @@ import type { VideoProject } from "@/editors/video/videoModel";
 
 const AUTOSAVE_KEY = "video.autosave";
 const MEDIA_PREFIX = "video.media.";
+const PROXY_PREFIX = "video.proxy.";
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
 export async function storeMediaBlob(sourceId: string, blob: Blob): Promise<void> {
@@ -20,11 +22,17 @@ export async function loadMediaBlob(sourceId: string): Promise<Blob | null> {
   return (await get<Blob>(MEDIA_PREFIX + sourceId)) ?? null;
 }
 
-/** Drop stored blobs no live project references any more. */
+/** Drop stored media and proxy blobs no live project references any more. */
 async function pruneMediaBlobs(project: VideoProject | null): Promise<void> {
-  const live = new Set(project?.sources.map((s) => MEDIA_PREFIX + s.id) ?? []);
+  const live = new Set(
+    project?.sources.flatMap((s) => [MEDIA_PREFIX + s.id, PROXY_PREFIX + s.id]) ?? [],
+  );
   for (const key of await keys()) {
-    if (typeof key === "string" && key.startsWith(MEDIA_PREFIX) && !live.has(key)) {
+    if (
+      typeof key === "string" &&
+      (key.startsWith(MEDIA_PREFIX) || key.startsWith(PROXY_PREFIX)) &&
+      !live.has(key)
+    ) {
       await del(key);
     }
   }
@@ -48,6 +56,7 @@ export async function relinkProjectMedia(project: VideoProject): Promise<{
         return s;
       }
       await registerMedia(s.id, blob);
+      void ensureProxy(s.id);
       return { ...s, url: URL.createObjectURL(blob) };
     }),
   );
