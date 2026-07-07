@@ -63,6 +63,25 @@ function SelectedClipActions(): JSX.Element | null {
           Detach audio
         </button>
       )}
+      {(source?.kind === "video" || source?.kind === "audio") && (
+        <label className="vid-volume" title={`Clip volume ${Math.round(clip.volume * 100)}%`}>
+          Vol
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            key={`${clip.id}-${clip.volume}`}
+            defaultValue={clip.volume}
+            onPointerUp={(e) =>
+              void dispatch("video.setClipVolume", {
+                clipId: clip.id,
+                volume: Number((e.target as HTMLInputElement).value),
+              })
+            }
+          />
+        </label>
+      )}
       {visual && (
         <>
           <button className="btn btn-quiet" onClick={() => setDialog("text")}>

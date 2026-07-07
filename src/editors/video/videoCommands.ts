@@ -11,6 +11,7 @@ import {
   addClip,
   addMarker,
   addSource,
+  addTrack,
   clipEnd,
   detachAudio,
   makeClip,
@@ -25,8 +26,10 @@ import {
   reorderTrack,
   rippleDelete,
   rollEdit,
+  setClipFade,
   setClipText,
   setTrackMuted,
+  setTrackSolo,
   slipClip,
   splitClip,
   trackEnd,
@@ -444,6 +447,46 @@ registerCommand({
       const track = p.tracks.find((t) => t.id === trackId);
       return track ? setTrackMuted(p, trackId, !track.muted) : p;
     }),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.toggleTrackSolo",
+  title: "Solo / unsolo track",
+  editor: "video",
+  schema: z.object({ trackId: z.string() }),
+  run: ({ trackId }) =>
+    mutateProject((p) => {
+      const track = p.tracks.find((t) => t.id === trackId);
+      return track ? setTrackSolo(p, trackId, !track.solo) : p;
+    }),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.addTrack",
+  title: "Add track",
+  editor: "video",
+  schema: z.object({ kind: z.enum(["video", "audio", "overlay", "caption"]) }),
+  run: ({ kind }) => mutateProject((p) => addTrack(p, kind)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setClipVolume",
+  title: "Set clip volume",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), volume: z.number().min(0).max(1) }),
+  run: ({ clipId, volume }) => mutateProject((p) => patchClip(p, clipId, { volume })),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setClipFade",
+  title: "Set clip audio fade",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), edge: z.enum(["in", "out"]), seconds: z.number().min(0) }),
+  run: ({ clipId, edge, seconds }) => mutateProject((p) => setClipFade(p, clipId, edge, seconds)),
   undo: undoProject,
 });
 

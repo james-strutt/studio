@@ -1,7 +1,33 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { formatTimecode, projectDuration } from "@/editors/video/videoModel";
+
+function MasterMeter(): JSX.Element {
+  const playing = useVideoStore((s) => s.playing);
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    if (!playing) {
+      setLevel(0);
+      return;
+    }
+    let raf = 0;
+    const tick = (): void => {
+      setLevel(playbackEngine.masterLevel());
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+  return (
+    <div className="vid-meter" title="Master level" aria-hidden="true">
+      <div
+        className={`vid-meter-fill${level > 0.85 ? " vid-meter-hot" : ""}`}
+        style={{ width: `${Math.round(level * 100)}%` }}
+      />
+    </div>
+  );
+}
 
 function SafeAreaGuides(): JSX.Element | null {
   const show = useVideoStore((s) => s.showSafeAreas);
@@ -86,6 +112,7 @@ export function VideoPreview(): JSX.Element {
           onChange={(e) => playbackEngine.seek(Number(e.target.value))}
         />
         <span className="vid-timecode vid-duration">{formatTimecode(duration, project.fps)}</span>
+        <MasterMeter />
       </div>
     </div>
   );

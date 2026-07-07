@@ -9,6 +9,7 @@ import {
   moveClip,
   projectDuration,
   rollEdit,
+  setClipFade,
   slipClip,
   trimClipLeft,
   trimClipRight,
@@ -30,7 +31,7 @@ const RULER_HEIGHT = 26;
 const LANE_HEIGHT = 48;
 const ABUT_EPS = 1e-6;
 
-type DragMode = "move" | "trim-left" | "trim-right" | "slip" | "roll";
+type DragMode = "move" | "trim-left" | "trim-right" | "slip" | "roll" | "fade-in" | "fade-out";
 
 interface DragState {
   mode: DragMode;
@@ -87,6 +88,12 @@ function previewDrag(
   if (mode === "slip") {
     return slipClip(project, clipId, -dt);
   }
+  if (mode === "fade-in") {
+    return setClipFade(project, clipId, "in", (orig.fadeIn ?? 0) + dt);
+  }
+  if (mode === "fade-out") {
+    return setClipFade(project, clipId, "out", (orig.fadeOut ?? 0) - dt);
+  }
   // roll: boundary follows the pointer from the original shared edge
   if (drag.neighbourId) {
     const boundary = snapTime(clipEnd(orig) + dt, drag.candidates, pps);
@@ -112,6 +119,10 @@ function dropCommand(drag: DragState, preview: VideoProject): void {
       rightClipId: drag.neighbourId,
       time: clipEnd(clip),
     });
+  } else if (drag.mode === "fade-in") {
+    void dispatch("video.setClipFade", { clipId: clip.id, edge: "in", seconds: clip.fadeIn ?? 0 });
+  } else if (drag.mode === "fade-out") {
+    void dispatch("video.setClipFade", { clipId: clip.id, edge: "out", seconds: clip.fadeOut ?? 0 });
   }
 }
 
@@ -170,6 +181,7 @@ function Lane({ project, track, pps, onClipPointerDown }: LaneProps): JSX.Elemen
         .map((clip) => {
           const source = project.sources.find((s) => s.id === clip.sourceId);
           const selected = clip.id === selectedClipId;
+          const hasAudio = source?.kind === "video" || source?.kind === "audio";
           return (
             <div
               key={clip.id}
@@ -182,6 +194,18 @@ function Lane({ project, track, pps, onClipPointerDown }: LaneProps): JSX.Elemen
               <span className="tl-clip-handle tl-clip-handle-l" />
               <span className="tl-clip-name">{source?.name ?? clip.sourceId}</span>
               <span className="tl-clip-handle tl-clip-handle-r" />
+              {clip.fadeIn ? (
+                <span className="tl-fade-ramp tl-fade-ramp-l" style={{ width: timeToPx(clip.fadeIn, pps) }} />
+              ) : null}
+              {clip.fadeOut ? (
+                <span className="tl-fade-ramp tl-fade-ramp-r" style={{ width: timeToPx(clip.fadeOut, pps) }} />
+              ) : null}
+              {hasAudio && (
+                <>
+                  <span className="tl-fade tl-fade-l" title="Drag right to fade in" />
+                  <span className="tl-fade tl-fade-r" title="Drag left to fade out" />
+                </>
+              )}
             </div>
           );
         })}
@@ -239,7 +263,9 @@ export function Timeline(): JSX.Element | null {
 
     let mode: DragMode = "move";
     let neighbourId: string | undefined;
-    if (isLeft || isRight) {
+    if (target.classList.contains("tl-fade-l")) mode = "fade-in";
+    else if (target.classList.contains("tl-fade-r")) mode = "fade-out";
+    else if (isLeft || isRight) {
       mode = isLeft ? "trim-left" : "trim-right";
       if (e.altKey && isRight) {
         const next = project.clips.find(
@@ -300,6 +326,13 @@ export function Timeline(): JSX.Element | null {
           <div key={track.id} className="tl-head">
             <span className="tl-head-name">{track.name}</span>
             <button
+              className={`tl-mute${track.solo ? " tl-mute-on" : ""}`}
+              title={track.solo ? "Unsolo track" : "Solo track"}
+              onClick={() => void dispatch("video.toggleTrackSolo", { trackId: track.id })}
+            >
+              S
+            </button>
+            <button
               className={`tl-mute${track.muted ? " tl-mute-on" : ""}`}
               title={track.muted ? "Unmute track" : "Mute track"}
               onClick={() => void dispatch("video.toggleTrackMute", { trackId: track.id })}
@@ -308,6 +341,22 @@ export function Timeline(): JSX.Element | null {
             </button>
           </div>
         ))}
+        <div className="tl-add-tracks">
+          <button
+            className="btn btn-quiet"
+            title="Add video track"
+            onClick={() => void dispatch("video.addTrack", { kind: "video" })}
+          >
+            +V
+          </button>
+          <button
+            className="btn btn-quiet"
+            title="Add audio track"
+            onClick={() => void dispatch("video.addTrack", { kind: "audio" })}
+          >
+            +A
+          </button>
+        </div>
       </div>
       <div className="tl-scroll" ref={scrollRef}>
         <div

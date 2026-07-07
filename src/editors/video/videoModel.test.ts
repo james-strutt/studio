@@ -24,6 +24,11 @@ import {
   packTrack,
   setClipText,
   makeClipText,
+  setClipFade,
+  setTrackSolo,
+  setTrackMuted,
+  trackAudible,
+  addTrack,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { containRect } from "@/editors/video/engine/renderMath";
@@ -181,6 +186,34 @@ describe("storyboard sequencing", () => {
     const withText = setClipText(project, clipId, makeClipText("Hello"));
     expect(withText.clips[0].text?.content).toBe("Hello");
     expect(setClipText(withText, clipId, null).clips[0].text).toBeUndefined();
+  });
+});
+
+describe("audio basics", () => {
+  it("clamps fades to the clip duration and clears zero fades", () => {
+    const { project, clipId } = projectWithClip(); // duration 6
+    const faded = setClipFade(project, clipId, "in", 99).clips[0];
+    expect(faded.fadeIn).toBe(6);
+    expect(setClipFade(faded ? { ...project, clips: [faded] } : project, clipId, "in", 0).clips[0].fadeIn).toBeUndefined();
+    expect(setClipFade(project, clipId, "out", 1.5).clips[0].fadeOut).toBe(1.5);
+  });
+
+  it("solo makes only soloed tracks audible; mute always wins", () => {
+    let { project } = projectWithClip();
+    const [v1, a1] = project.tracks;
+    expect(trackAudible(project, v1)).toBe(true);
+    project = setTrackSolo(project, "a1", true);
+    expect(trackAudible(project, project.tracks[0])).toBe(false); // v1 silenced by a1 solo
+    expect(trackAudible(project, project.tracks[1])).toBe(true);
+    project = setTrackMuted(project, "a1", true);
+    expect(trackAudible(project, project.tracks[1])).toBe(false); // muted even while soloed
+    expect(a1.kind).toBe("audio");
+  });
+
+  it("adds numbered tracks of a kind", () => {
+    const { project } = projectWithClip();
+    const out = addTrack(addTrack(project, "audio"), "video");
+    expect(out.tracks.map((t) => t.name)).toEqual(["Video 1", "Audio 1", "Audio 2", "Video 2"]);
   });
 });
 

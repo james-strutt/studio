@@ -111,6 +111,39 @@
   font-size: var(--text-xs);
 }
 
+.vid-volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-2);
+}
+
+.vid-volume input {
+  width: 80px;
+  accent-color: var(--accent);
+}
+
+.vid-meter {
+  width: 90px;
+  height: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.vid-meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 60ms linear;
+}
+
+.vid-meter-hot {
+  background: #dc2626;
+}
+
 /* ---- clip dialogs ---- */
 
 .vid-form {
@@ -424,6 +457,50 @@
 .tl-clip-handle:hover {
   background: var(--accent);
   opacity: 0.5;
+}
+
+.tl-fade {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-top: 10px solid var(--accent);
+  cursor: ew-resize;
+  opacity: 0.6;
+}
+
+.tl-fade-l {
+  left: 8px;
+  border-right: 10px solid transparent;
+}
+
+.tl-fade-r {
+  right: 8px;
+  border-left: 10px solid transparent;
+}
+
+.tl-fade-ramp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.tl-fade-ramp-l {
+  left: 0;
+  background: linear-gradient(to right, var(--accent), transparent);
+}
+
+.tl-fade-ramp-r {
+  right: 0;
+  background: linear-gradient(to left, var(--accent), transparent);
+}
+
+.tl-add-tracks {
+  display: flex;
+  gap: 4px;
+  padding: var(--space-2);
 }
 
 .tl-playhead {

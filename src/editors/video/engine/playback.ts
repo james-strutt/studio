@@ -2,10 +2,12 @@ import type { AudioBufferSink, CanvasSink, WrappedCanvas } from "mediabunny";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import {
   clipAt,
+  clipEnd,
   clipProgress,
   previousAbutting,
   projectDuration,
   sourceTimeAt,
+  trackAudible,
   tracksOfKind,
   transitionProgress,
   transitionTail,
@@ -57,6 +59,26 @@ class ClipVideoPlayer {
   }
 }
 
+interface ClipAudioTiming {
+  volume: number;
+  fadeIn: number;
+  fadeOut: number;
+  clipStartCtx: number; // AudioContext time when the clip starts on the timeline
+  clipEndCtx: number;
+}
+
+/** Piecewise gain value for a fade envelope at one moment (for mid-clip starts). */
+function envelopeValueAt(timing: ClipAudioTiming, ctxTime: number): number {
+  const { volume, fadeIn, fadeOut, clipStartCtx, clipEndCtx } = timing;
+  if (fadeIn > 0 && ctxTime < clipStartCtx + fadeIn) {
+    return (Math.max(0, ctxTime - clipStartCtx) / fadeIn) * volume;
+  }
+  if (fadeOut > 0 && ctxTime > clipEndCtx - fadeOut) {
+    return (Math.max(0, clipEndCtx - ctxTime) / fadeOut) * volume;
+  }
+  return volume;
+}
+
 /** Schedules one playing clip's audio onto the shared AudioContext clock. */
 class ClipAudioPlayer {
   private stopped = false;
@@ -66,14 +88,25 @@ class ClipAudioPlayer {
   constructor(
     sink: AudioBufferSink,
     private ctx: AudioContext,
+    destination: AudioNode,
     anchor: { ctxTime: number; sourceTime: number },
     sourceEnd: number,
-    volume: number,
+    timing: ClipAudioTiming,
     private sourceNow: () => number,
   ) {
     this.gain = ctx.createGain();
-    this.gain.gain.value = volume;
-    this.gain.connect(ctx.destination);
+    this.gain.connect(destination);
+    const now = ctx.currentTime;
+    const g = this.gain.gain;
+    g.setValueAtTime(envelopeValueAt(timing, now), now);
+    if (timing.fadeIn > 0 && timing.clipStartCtx + timing.fadeIn > now) {
+      g.linearRampToValueAtTime(timing.volume, timing.clipStartCtx + timing.fadeIn);
+    }
+    if (timing.fadeOut > 0) {
+      const fadeStart = timing.clipEndCtx - timing.fadeOut;
+      if (fadeStart > now) g.setValueAtTime(timing.volume, fadeStart);
+      g.linearRampToValueAtTime(0, timing.clipEndCtx);
+    }
     void this.run(sink, anchor, sourceEnd);
   }
 
@@ -130,6 +163,9 @@ class PlaybackEngine {
   private anchor = { wall: 0, playhead: 0 };
   private players = new Map<string, ActivePlayer>();
   private audioCtx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private meterBuffer: Uint8Array<ArrayBuffer> | null = null;
   private stillToken = 0;
 
   attach(canvas: HTMLCanvasElement): void {
@@ -159,6 +195,12 @@ class PlaybackEngine {
     if (!this.audioCtx) {
       try {
         this.audioCtx = new AudioContext();
+        this.masterGain = this.audioCtx.createGain();
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 1024;
+        this.meterBuffer = new Uint8Array(this.analyser.fftSize);
+        this.masterGain.connect(this.analyser);
+        this.analyser.connect(this.audioCtx.destination);
       } catch {
         this.audioCtx = null; // video-only playback still works
       }
@@ -196,6 +238,18 @@ class PlaybackEngine {
   togglePlay(): void {
     if (this.playing) this.pause();
     else this.play();
+  }
+
+  /** Master output RMS level 0..1 for the meter (0 when idle). */
+  masterLevel(): number {
+    if (!this.playing || !this.analyser || !this.meterBuffer) return 0;
+    this.analyser.getByteTimeDomainData(this.meterBuffer);
+    let sum = 0;
+    for (const v of this.meterBuffer) {
+      const x = (v - 128) / 128;
+      sum += x * x;
+    }
+    return Math.min(1, Math.sqrt(sum / this.meterBuffer.length) * 2);
   }
 
   dispose(): void {
@@ -242,10 +296,11 @@ class PlaybackEngine {
       const clip = clipAt(project, track.id, t);
       if (!clip) continue;
       const visual = track.kind !== "audio";
-      wanted.set(clip.id, { clip, muted: track.muted, visual });
+      const muted = !trackAudible(project, track);
+      wanted.set(clip.id, { clip, muted, visual });
       if (visual && transitionProgress(clip, t) !== null) {
         const prev = previousAbutting(project, clip);
-        if (prev) wanted.set(prev.id, { clip: prev, muted: track.muted, visual });
+        if (prev) wanted.set(prev.id, { clip: prev, muted, visual });
       }
     }
     return wanted;
@@ -286,13 +341,20 @@ class PlaybackEngine {
       ? new ClipVideoPlayer(videoSink, sourceStart, videoEnd, sourceNow)
       : null;
     const audio =
-      handle.audio && !muted && clip.volume > 0 && this.audioCtx
+      handle.audio && !muted && clip.volume > 0 && this.audioCtx && this.masterGain
         ? new ClipAudioPlayer(
             handle.audio,
             this.audioCtx,
+            this.masterGain,
             { ctxTime: this.audioCtx.currentTime, sourceTime: sourceStart },
             clip.outPoint,
-            clip.volume,
+            {
+              volume: clip.volume,
+              fadeIn: clip.fadeIn ?? 0,
+              fadeOut: clip.fadeOut ?? 0,
+              clipStartCtx: this.audioCtx.currentTime + (clip.start - t),
+              clipEndCtx: this.audioCtx.currentTime + (clipEnd(clip) - t),
+            },
             sourceNow,
           )
         : null;

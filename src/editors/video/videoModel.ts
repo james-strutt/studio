@@ -59,6 +59,8 @@ export interface Clip {
   inPoint: number; // source in, seconds
   outPoint: number; // source out, seconds
   volume: number; // 0..1
+  fadeIn?: number; // audio fade seconds from clip start
+  fadeOut?: number; // audio fade seconds before clip end
   transform?: ClipTransform;
   text?: ClipText;
   crop?: ClipCrop;
@@ -75,6 +77,7 @@ export interface Track {
   kind: TrackKind;
   name: string;
   muted: boolean;
+  solo?: boolean;
 }
 
 export interface Marker {
@@ -161,6 +164,53 @@ export function setTrackMuted(project: VideoProject, trackId: string, muted: boo
   return {
     ...project,
     tracks: project.tracks.map((t) => (t.id === trackId ? { ...t, muted } : t)),
+  };
+}
+
+export function setTrackSolo(project: VideoProject, trackId: string, solo: boolean): VideoProject {
+  return {
+    ...project,
+    tracks: project.tracks.map((t) => (t.id === trackId ? { ...t, solo } : t)),
+  };
+}
+
+/** Audible = not muted, and when any track is soloed, only soloed tracks play. */
+export function trackAudible(project: VideoProject, track: Track): boolean {
+  if (track.muted) return false;
+  const anySolo = project.tracks.some((t) => t.solo);
+  return !anySolo || Boolean(track.solo);
+}
+
+export function addTrack(project: VideoProject, kind: TrackKind): VideoProject {
+  const count = tracksOfKind(project, kind).length;
+  const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+  const track: Track = { id: id(kind[0]), kind, name: `${label} ${count + 1}`, muted: false };
+  return { ...project, tracks: [...project.tracks, track] };
+}
+
+/** Clamped audio fades; a fade of 0 clears the field. */
+export function setClipFade(
+  project: VideoProject,
+  clipId: string,
+  edge: "in" | "out",
+  seconds: number,
+): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const s = Math.max(0, Math.min(seconds, clipDuration(c)));
+      const next = { ...c };
+      if (edge === "in") {
+        if (s > 0) next.fadeIn = s;
+        else delete next.fadeIn;
+      } else if (s > 0) {
+        next.fadeOut = s;
+      } else {
+        delete next.fadeOut;
+      }
+      return next;
+    }),
   };
 }
 
