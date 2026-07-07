@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { registerCommand } from "@/commands/registry";
 import { getFileService } from "@/files/fileService";
+import { downloadFile } from "@/files/download";
 import { useImageStore } from "@/editors/image/useImageStore";
+import { scaleCanvas, encodeCanvas, extFor } from "@/editors/image/imageExport";
 import {
   rasterLayer,
   textLayer,
@@ -250,6 +252,26 @@ registerCommand({
   schema: z.object({ dir: z.enum(["cw", "ccw"]).default("cw") }),
   run: ({ dir }) => mutateDoc((doc) => rotateCanvas(doc, dir)),
   undo: undoDoc,
+});
+
+registerCommand({
+  id: "image.exportImage",
+  title: "Export image",
+  editor: "image",
+  schema: z.object({
+    format: z.enum(["png", "jpeg", "webp", "avif"]).default("png"),
+    quality: z.number().min(0.1).max(1).default(0.92),
+    scale: z.number().positive().default(1),
+  }),
+  run: async ({ format, quality, scale }) => {
+    const store = useImageStore.getState();
+    const doc = store.getDoc();
+    const canvas = store.exporter?.();
+    if (!doc || !canvas) return;
+    const bytes = await encodeCanvas(scaleCanvas(canvas, scale), format, quality);
+    if (!bytes) return;
+    downloadFile(`${doc.name.replace(/\.[^.]+$/, "")}.${extFor(format)}`, bytes);
+  },
 });
 
 function ensureDoc(): void {

@@ -8,6 +8,9 @@ interface ImageStore {
   tool: ImageTool;
   brushColor: string;
   brushSize: number;
+  /** Set by ImageStage: returns the composited doc at 1:1, or null. */
+  exporter: (() => HTMLCanvasElement | null) | null;
+  setExporter: (fn: (() => HTMLCanvasElement | null) | null) => void;
   createDoc: (name: string, width: number, height: number) => void;
   setLayers: (layers: Layer[], selectedId?: string | null) => void;
   replaceDoc: (doc: ImageDoc) => void;
@@ -25,6 +28,8 @@ export const useImageStore = create<ImageStore>((set, get) => ({
   tool: "select",
   brushColor: "#B45309",
   brushSize: 6,
+  exporter: null,
+  setExporter: (exporter) => set({ exporter }),
   setTool: (tool) => set({ tool }),
   setBrushColor: (brushColor) => set({ brushColor }),
   setBrushSize: (brushSize) => set({ brushSize }),

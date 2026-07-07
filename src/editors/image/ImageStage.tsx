@@ -202,12 +202,40 @@ export function ImageStage(): JSX.Element {
     tr.getLayer()?.batchDraw();
   }, [selectedId, layers, tool]);
 
-  if (!doc) return <div className="img-stage-wrap" ref={wrapRef} />;
-
+  const setExporter = useImageStore((s) => s.setExporter);
   const pad = 48;
-  const scale = Math.min((size.w - pad) / doc.width, (size.h - pad) / doc.height, 4) || 1;
-  const offsetX = (size.w - doc.width * scale) / 2;
-  const offsetY = (size.h - doc.height * scale) / 2;
+  const scale = doc ? Math.min((size.w - pad) / doc.width, (size.h - pad) / doc.height, 4) || 1 : 1;
+  const offsetX = doc ? (size.w - doc.width * scale) / 2 : 0;
+  const offsetY = doc ? (size.h - doc.height * scale) / 2 : 0;
+
+  // Expose a 1:1 composited canvas for export (transformer hidden during capture).
+  useEffect(() => {
+    if (!doc) {
+      setExporter(null);
+      return;
+    }
+    setExporter(() => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+      const tr = trRef.current;
+      const kept = tr?.nodes() ?? [];
+      tr?.nodes([]);
+      tr?.getLayer()?.batchDraw();
+      const canvas = stage.toCanvas({
+        x: offsetX,
+        y: offsetY,
+        width: doc.width * scale,
+        height: doc.height * scale,
+        pixelRatio: 1 / scale,
+      });
+      tr?.nodes(kept);
+      tr?.getLayer()?.batchDraw();
+      return canvas;
+    });
+    return () => setExporter(null);
+  }, [doc, offsetX, offsetY, scale, setExporter]);
+
+  if (!doc) return <div className="img-stage-wrap" ref={wrapRef} />;
   const toDoc = (p: { x: number; y: number }): { x: number; y: number } => ({
     x: (p.x - offsetX) / scale,
     y: (p.y - offsetY) / scale,

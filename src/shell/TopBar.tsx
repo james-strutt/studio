@@ -1,5 +1,6 @@
 import { useShellStore, type EditorId } from "@/store/useShellStore";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
+import { useImageStore } from "@/editors/image/useImageStore";
 import { dispatch } from "@/commands/history";
 
 const EDITORS: { id: EditorId; label: string }[] = [
@@ -11,7 +12,14 @@ const EDITORS: { id: EditorId; label: string }[] = [
 export function TopBar(): JSX.Element {
   const active = useShellStore((s) => s.activeEditor);
   const activePdf = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
+  const hasImageDoc = useImageStore((s) => !!s.doc);
   const canSave = active === "pdf" && !!activePdf;
+  const canExport = canSave || (active === "image" && hasImageDoc);
+
+  const onExport = (): void => {
+    if (active === "pdf" && activePdf) void dispatch("pdf.save", {});
+    else if (active === "image" && hasImageDoc) void dispatch("image.exportImage", {});
+  };
 
   return (
     <header className="shell-top">
@@ -33,11 +41,7 @@ export function TopBar(): JSX.Element {
             {activePdf.dirty ? "unsaved" : "saved"}
           </span>
         )}
-        <button
-          className="btn btn-primary"
-          disabled={!canSave}
-          onClick={() => canSave && void dispatch("pdf.save", {})}
-        >
+        <button className="btn btn-primary" disabled={!canExport} onClick={onExport}>
           Export
         </button>
       </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { dispatch } from "@/commands/history";
 import { useImageStore, type ImageTool } from "@/editors/image/useImageStore";
 import { ImageCanvasDialog } from "@/editors/image/ImageCanvasDialog";
+import { ImageExportDialog } from "@/editors/image/ImageExportDialog";
 
 const TOOLS: { id: ImageTool; label: string; glyph: string }[] = [
   { id: "select", label: "Select / move", glyph: "⌶" },
@@ -22,6 +23,7 @@ export function ImageToolbar(): JSX.Element {
   const setBrushSize = useImageStore((s) => s.setBrushSize);
   const selectedId = doc?.selectedId ?? null;
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
     <div className="img-toolbar">
@@ -79,6 +81,9 @@ export function ImageToolbar(): JSX.Element {
           <button className="btn btn-quiet" onClick={() => setCanvasOpen(true)}>
             Canvas…
           </button>
+          <button className="btn btn-quiet" onClick={() => setExportOpen(true)}>
+            Export…
+          </button>
           <span className="img-doc-size">
             {doc.width} × {doc.height}
           </span>
@@ -92,6 +97,7 @@ export function ImageToolbar(): JSX.Element {
         Delete layer
       </button>
       {doc && canvasOpen && <ImageCanvasDialog doc={doc} onClose={() => setCanvasOpen(false)} />}
+      {exportOpen && <ImageExportDialog onClose={() => setExportOpen(false)} />}
     </div>
   );
 }
