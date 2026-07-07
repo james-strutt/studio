@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePdfStore, type PdfDoc } from "@/editors/pdf/pdfStore";
 import { PdfPage } from "@/editors/pdf/PdfPage";
+import { PdfMarkupLayer } from "@/editors/pdf/PdfMarkupLayer";
 import {
   buildLayout,
   fitPageScale,
@@ -152,13 +153,21 @@ export function PdfViewer({ doc }: { doc: PdfDoc }): JSX.Element {
                   className="pdf-page-slot"
                   style={{ width: row.dims[ci].w, height: row.dims[ci].h }}
                 >
-                  <PdfPage doc={doc.doc} pageNumber={p + 1} scale={scale} rotation={doc.rotation} />
+                  <PdfPage
+                    doc={doc.doc}
+                    pageNumber={p + 1}
+                    scale={scale}
+                    rotation={doc.rotation}
+                    textLayer={doc.rotation === 0}
+                    pageHeightPts={doc.pageSizes[p].height}
+                  />
                 </div>
               ))}
             </div>
           );
         })}
       </div>
+      <PdfMarkupLayer scrollRef={scrollRef} />
     </div>
   );
 }

@@ -22,36 +22,10 @@ import { parsePageRanges } from "@/editors/pdf/pdfRanges";
 import { destToPageIndex } from "@/editors/pdf/pdfDest";
 import { resolveOutlineTree } from "@/editors/pdf/pdfOutlineResolve";
 import { pdfInputFromBytes, performMerge } from "@/editors/pdf/pdfMergeRun";
+import { mutateActive, undoMutation, targetPages } from "@/editors/pdf/pdfMutate";
 
 const noArgs = z.object({});
 const A4: [number, number] = [595, 842];
-
-interface UndoPatch {
-  docId: string;
-  prev: Uint8Array;
-}
-
-async function mutateActive(
-  transform: (bytes: Uint8Array) => Promise<Uint8Array>,
-): Promise<UndoPatch | null> {
-  const d = usePdfStore.getState().getActive();
-  if (!d) return null;
-  const prev = d.bytes;
-  const next = await transform(prev);
-  await usePdfStore.getState().replaceBytes(d.id, next);
-  return { docId: d.id, prev };
-}
-
-async function undoMutation(_a: unknown, patch: UndoPatch | null): Promise<void> {
-  if (patch) await usePdfStore.getState().replaceBytes(patch.docId, patch.prev);
-}
-
-function targetPages(): number[] {
-  const s = usePdfStore.getState();
-  const d = s.getActive();
-  if (!d) return [];
-  return s.selection.length ? [...s.selection].sort((a, b) => a - b) : [d.currentPage - 1];
-}
 
 registerCommand({
   id: "pdf.deleteSelected",
