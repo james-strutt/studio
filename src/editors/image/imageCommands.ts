@@ -6,6 +6,9 @@ import {
   rasterLayer,
   textLayer,
   shapeLayer,
+  drawLayer,
+  arrowLayer,
+  badgeLayer,
   reorder,
   cropDoc,
   resizeCanvas,
@@ -93,11 +96,11 @@ registerCommand({
   id: "image.addText",
   title: "Add text layer",
   editor: "image",
-  schema: z.object({ text: z.string().default("Text") }),
-  run: ({ text }) => {
+  schema: z.object({ text: z.string().default("Text"), x: z.number().optional(), y: z.number().optional() }),
+  run: ({ text, x, y }) => {
     ensureDoc();
     return mutate((layers) => {
-      const l = textLayer(text);
+      const l = textLayer(text, x, y);
       return { layers: [...layers, l], selectedId: l.id };
     });
   },
@@ -113,6 +116,56 @@ registerCommand({
     ensureDoc();
     return mutate((layers) => {
       const l = shapeLayer(shape);
+      return { layers: [...layers, l], selectedId: l.id };
+    });
+  },
+  undo: undoMutate,
+});
+
+registerCommand({
+  id: "image.addDraw",
+  title: "Add brush stroke",
+  editor: "image",
+  schema: z.object({ points: z.array(z.number()), stroke: z.string(), strokeWidth: z.number().positive() }),
+  run: ({ points, stroke, strokeWidth }) => {
+    ensureDoc();
+    return mutate((layers) => {
+      const l = drawLayer(points, stroke, strokeWidth);
+      return { layers: [...layers, l], selectedId: l.id };
+    });
+  },
+  undo: undoMutate,
+});
+
+registerCommand({
+  id: "image.addArrow",
+  title: "Add arrow",
+  editor: "image",
+  schema: z.object({
+    points: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    stroke: z.string(),
+    strokeWidth: z.number().positive(),
+  }),
+  run: ({ points, stroke, strokeWidth }) => {
+    ensureDoc();
+    return mutate((layers) => {
+      const l = arrowLayer(points, stroke, strokeWidth);
+      return { layers: [...layers, l], selectedId: l.id };
+    });
+  },
+  undo: undoMutate,
+});
+
+registerCommand({
+  id: "image.addBadge",
+  title: "Add numbered step",
+  editor: "image",
+  schema: z.object({ x: z.number(), y: z.number(), fill: z.string() }),
+  run: ({ x, y, fill }) => {
+    ensureDoc();
+    return mutate((layers) => {
+      const next = layers.filter((l) => l.type === "badge").length + 1;
+      const l = badgeLayer(next, x, y, fill);
       return { layers: [...layers, l], selectedId: l.id };
     });
   },

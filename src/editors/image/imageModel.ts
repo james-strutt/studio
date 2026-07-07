@@ -10,7 +10,7 @@ export type BlendMode =
   | "difference"
   | "exclusion";
 
-export type LayerType = "raster" | "text" | "shape";
+export type LayerType = "raster" | "text" | "shape" | "draw" | "arrow" | "badge";
 
 /** Non-destructive per-layer adjustment amounts (native filter param ranges). */
 export interface LayerAdjust {
@@ -86,7 +86,28 @@ export interface ShapeLayer extends BaseLayer {
   strokeWidth: number;
 }
 
-export type Layer = RasterLayer | TextLayer | ShapeLayer;
+export interface DrawLayer extends BaseLayer {
+  type: "draw";
+  points: number[]; // [x,y,x,y,…] in doc space
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface ArrowLayer extends BaseLayer {
+  type: "arrow";
+  points: [number, number, number, number]; // x1,y1,x2,y2
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface BadgeLayer extends BaseLayer {
+  type: "badge";
+  number: number;
+  radius: number;
+  fill: string;
+}
+
+export type Layer = RasterLayer | TextLayer | ShapeLayer | DrawLayer | ArrowLayer | BadgeLayer;
 
 export interface ImageDoc {
   id: string;
@@ -154,6 +175,22 @@ export function shapeLayer(shape: "rect" | "ellipse", x = 40, y = 40): ShapeLaye
     stroke: "#111111",
     strokeWidth: 0,
   };
+}
+
+export function drawLayer(points: number[], stroke: string, strokeWidth: number): DrawLayer {
+  return { ...baseDefaults(), id: makeId("draw"), type: "draw", name: "Brush", points, stroke, strokeWidth };
+}
+
+export function arrowLayer(
+  points: [number, number, number, number],
+  stroke: string,
+  strokeWidth: number,
+): ArrowLayer {
+  return { ...baseDefaults(), id: makeId("arrow"), type: "arrow", name: "Arrow", points, stroke, strokeWidth };
+}
+
+export function badgeLayer(number: number, x: number, y: number, fill = "#B45309"): BadgeLayer {
+  return { ...baseDefaults(), id: makeId("badge"), type: "badge", name: `Step ${number}`, x, y, number, radius: 18, fill };
 }
 
 /** Reorder a layer from one index to another (immutably). */

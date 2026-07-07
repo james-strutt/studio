@@ -38,4 +38,17 @@ describe("image commands", () => {
     await dispatch("image.removeLayer", { id }, DOC);
     expect(layers()).toHaveLength(0);
   });
+
+  it("numbered-step badges auto-increment", async () => {
+    await dispatch("image.addBadge", { x: 10, y: 10, fill: "#000" }, DOC);
+    await dispatch("image.addBadge", { x: 20, y: 20, fill: "#000" }, DOC);
+    const badges = layers().filter((l) => l.type === "badge");
+    expect(badges.map((b) => (b.type === "badge" ? b.number : 0))).toEqual([1, 2]);
+  });
+
+  it("adds brush and arrow layers", async () => {
+    await dispatch("image.addDraw", { points: [0, 0, 5, 5, 10, 0], stroke: "#111", strokeWidth: 4 }, DOC);
+    await dispatch("image.addArrow", { points: [0, 0, 40, 40], stroke: "#111", strokeWidth: 3 }, DOC);
+    expect(layers().map((l) => l.type)).toEqual(["draw", "arrow"]);
+  });
 });
