@@ -100,6 +100,23 @@ export function PdfAnnotToolbar(): JSX.Element {
       <span className="pdf-annot-scale" title="Measurement scale">
         {calibration ? `1 ${calibration.unit} = ${Math.round(calibration.pointsPerUnit)} pt` : "uncalibrated"}
       </span>
+      <span className="pdf-toolbar-sep" aria-hidden="true" />
+      <button
+        className="btn btn-ghost"
+        aria-pressed={tool === "redact"}
+        title="Redact area (removes content)"
+        onClick={() => setTool("redact")}
+      >
+        ▮ Redact
+      </button>
+      <button
+        className="btn btn-ghost"
+        aria-pressed={tool === "link"}
+        title="Draw a link"
+        onClick={() => setTool("link")}
+      >
+        🔗 Link
+      </button>
     </div>
   );
 }

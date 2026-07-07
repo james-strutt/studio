@@ -18,7 +18,9 @@ export type AnnotTool =
   | "calibrate"
   | "distance"
   | "perimeter"
-  | "area";
+  | "area"
+  | "redact"
+  | "link";
 
 export interface PdfDoc {
   id: string;

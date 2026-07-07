@@ -18,6 +18,8 @@ const DRAG_TOOLS: AnnotTool[] = [
   "text",
   "calibrate",
   "distance",
+  "redact",
+  "link",
 ];
 const isPolyTool = (t: AnnotTool): boolean =>
   t === "polygon" || t === "perimeter" || t === "area";
@@ -44,9 +46,10 @@ export function PdfDrawOverlay({
   const [verts, setVerts] = useState<Pt[]>([]);
   const [cursor, setCursor] = useState<Pt | null>(null);
   const [popup, setPopup] = useState<{
-    kind: "note" | "text" | "calibrate";
+    kind: "note" | "text" | "calibrate" | "link";
     box: number[];
     pdfLen?: number;
+    rect?: [number, number, number, number];
   } | null>(null);
   const [text, setText] = useState("");
   const [calLen, setCalLen] = useState("");
@@ -149,6 +152,15 @@ export function PdfDrawOverlay({
         nx1 - nx0 < 12 || ny1 - ny0 < 12 ? [nx0, ny0, nx0 + 160, ny0 + 60] : [nx0, ny0, nx1, ny1];
       setText("");
       setPopup({ kind: "text", box });
+    } else if (tool === "redact") {
+      if (nx1 - nx0 < 3 || ny1 - ny0 < 3) return;
+      // mupdf uses a top-left origin, so map local px straight through (no Y flip).
+      const mrect: [number, number, number, number] = [nx0 / scale, ny0 / scale, nx1 / scale, ny1 / scale];
+      void dispatch("pdf.redactRects", { pageIndex, rects: [mrect] });
+    } else if (tool === "link") {
+      if (nx1 - nx0 < 4 || ny1 - ny0 < 4) return;
+      setText("");
+      setPopup({ kind: "link", box: [nx1, ny0], rect: [toX(nx0), toY(ny1), toX(nx1), toY(ny0)] });
     }
   };
 
@@ -212,6 +224,18 @@ export function PdfDrawOverlay({
       submitCalibration();
       return;
     }
+    if (popup.kind === "link") {
+      if (popup.rect && text.trim()) {
+        void dispatch("pdf.addLink", {
+          pageIndex,
+          rect: popup.rect,
+          target: { kind: "uri", uri: text.trim() },
+        });
+      }
+      setPopup(null);
+      setText("");
+      return;
+    }
     if (popup.kind === "note") {
       const [x, y] = popup.box;
       void dispatch("pdf.addNote", {
@@ -237,7 +261,8 @@ export function PdfDrawOverlay({
 
   // In-progress preview geometry.
   const previews: JSX.Element[] = [];
-  if (drag && (tool === "rect" || tool === "ellipse" || tool === "text")) {
+  const boxTool = tool === "rect" || tool === "ellipse" || tool === "text" || tool === "redact" || tool === "link";
+  if (drag && boxTool) {
     const x = Math.min(drag.start.x, drag.cur.x);
     const y = Math.min(drag.start.y, drag.cur.y);
     const w = Math.abs(drag.cur.x - drag.start.x);
@@ -308,6 +333,15 @@ export function PdfDrawOverlay({
                 />
               </div>
             </>
+          ) : popup.kind === "link" ? (
+            <input
+              className="input"
+              autoFocus
+              placeholder="https://…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitPopup()}
+            />
           ) : (
             <textarea
               className="input"

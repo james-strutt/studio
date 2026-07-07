@@ -8,7 +8,7 @@ import {
   setPageBackground,
   addLink,
 } from "@/editors/pdf/pdfContent";
-import { redactText, redactPattern, sanitise } from "@/editors/pdf/pdfRedaction";
+import { redactText, redactPattern, redactRects, sanitise } from "@/editors/pdf/pdfRedaction";
 
 const rgbSchema = z.object({ r: z.number(), g: z.number(), b: z.number() });
 
@@ -111,6 +111,22 @@ registerCommand({
   editor: "pdf",
   schema: z.object({ kind: z.enum(["email", "phone", "custom"]), custom: z.string().optional() }),
   run: ({ kind, custom }) => mutateActive((bytes) => redactPattern(bytes, kind, custom)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.redactRects",
+  title: "Redact area",
+  editor: "pdf",
+  // rects are in mupdf top-left coordinates.
+  schema: z.object({
+    pageIndex: z.number().int().nonnegative(),
+    rects: z.array(z.tuple([z.number(), z.number(), z.number(), z.number()])),
+  }),
+  run: ({ pageIndex, rects }) => {
+    if (rects.length === 0) return null;
+    return mutateActive((bytes) => redactRects(bytes, pageIndex, rects));
+  },
   undo: undoMutation,
 });
 
