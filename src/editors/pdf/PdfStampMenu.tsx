@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 import { getFileService } from "@/files/fileService";
@@ -22,11 +22,21 @@ function centre(): { pageIndex: number; cx: number; cy: number } | null {
 
 export function PdfStampMenu(): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const [stamps, setStamps] = useState<StoredStamp[]>([]);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (open) void listStamps().then(setStamps);
   }, [open]);
+
+  const toggle = (): void => {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos({ left: r.left, top: r.bottom + 4 });
+    }
+    setOpen((o) => !o);
+  };
 
   const placeText = (label: string, color: RGB): void => {
     const c = centre();
@@ -73,13 +83,13 @@ export function PdfStampMenu(): JSX.Element {
 
   return (
     <div className="pdf-stamp-menu">
-      <button className="btn btn-quiet" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={btnRef} className="btn btn-quiet" aria-expanded={open} onClick={toggle}>
         Stamp ▾
       </button>
       {open && (
         <>
           <div className="pdf-menu-backdrop" onClick={() => setOpen(false)} />
-          <div className="pdf-menu" role="menu">
+          <div className="pdf-menu" role="menu" style={{ left: pos.left, top: pos.top }}>
             <div className="pdf-menu-label">Presets</div>
             {PRESETS.map((p) => (
               <button

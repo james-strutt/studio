@@ -120,6 +120,7 @@ Security & output (everyday tier)
 - [x] P1.18 Convert: images→PDF (batch, page-size options), PDF→PNG/JPG per page (pdfjs render), PDF→plain text.
   - DONE. `pdfConvert.ts`: `imagesToPdf` (batch, page-size modes image/A4/Letter — unit-tested, 3 cases), `pdfToText` (pdf.js text extraction → `.txt`), `pdfToImages` (pdf.js render → PNG/JPG per page at a chosen scale). Palette commands `pdf.imagesToPdf` / `pdf.exportText` / `pdf.exportImages` with sensible defaults.
 - [ ] P1.19 **Phase done when:** every P1 feature is a palette-searchable command with working undo; a real-world task (merge 3 PDFs, reorder, annotate, measure, fill+sign a form, password, compress, export) completes without dev tools open.
+  - STATUS: all P1 features except P1.16 (password, mupdf-blocked) are implemented as registry commands with undo, wired to UI (toolbars/panels/menus/palette). 61 unit tests green; typecheck + lint + web build clean across the phase. NOT yet ticked because (a) P1.16 is deferred, so the "password" step of the real-world task can't run, and (b) the end-to-end click-through "without dev tools" hasn't been performed — Claude-in-Chrome is proxy-routed to a different Studio checkout on this machine (see P1.8 note), so in-app verification wasn't possible this session. Recommend: land mupdf (unblocks P1.16 + P2.6/P2.7) and do one manual pass on a machine where the browser reaches this build, then tick.
 
 ## Phase 2 — Image editor foundation + PDF content editing
 

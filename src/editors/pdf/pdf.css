@@ -638,9 +638,7 @@
 }
 
 .pdf-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
+  position: fixed;
   z-index: 141;
   min-width: 200px;
   max-height: 60vh;
