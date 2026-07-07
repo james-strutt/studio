@@ -3,18 +3,42 @@ import { Stage, Layer as KonvaLayer, Image as KonvaImage, Text, Rect, Shape, Tra
 import type Konva from "konva";
 import { dispatch } from "@/commands/history";
 import { useImageStore } from "@/editors/image/useImageStore";
-import { blendToComposite, type Layer } from "@/editors/image/imageModel";
+import {
+  blendToComposite,
+  hasAdjust,
+  type Layer,
+  type RasterLayer,
+  type TextLayer,
+  type ShapeLayer,
+} from "@/editors/image/imageModel";
+import { layerFilters, filterAttrs } from "@/editors/image/konvaFilters";
 import { useHtmlImage } from "@/editors/image/useHtmlImage";
 
 type Register = (node: Konva.Node | null) => void;
 
-interface NodeProps {
-  layer: Layer;
-  selected: boolean;
-  register: Register;
+const adjustKey = (l: Layer): string => (l.adjust ? Object.values(l.adjust).join(",") : "");
+
+/** A ref callback that also registers with the transformer and (re)caches for filters. */
+function useCachedRef(register: Register, shouldCache: boolean, cacheKey: string): Register {
+  const ref = useRef<Konva.Node | null>(null);
+  useEffect(() => {
+    const n = ref.current;
+    if (!n) return;
+    if (shouldCache) n.cache();
+    else n.clearCache();
+    n.getLayer()?.batchDraw();
+  }, [shouldCache, cacheKey]);
+  return (n) => {
+    ref.current = n;
+    register(n);
+  };
 }
 
-function commonProps(layer: Layer, register: Register): Record<string, unknown> {
+function commonProps(layer: Layer): Record<string, unknown> {
+  const adjust = layer.adjust;
+  const filterProps = hasAdjust(adjust)
+    ? { filters: layerFilters(adjust), ...filterAttrs(adjust!) }
+    : {};
   return {
     id: layer.id,
     x: layer.x,
@@ -27,7 +51,6 @@ function commonProps(layer: Layer, register: Register): Record<string, unknown> 
     globalCompositeOperation: blendToComposite(layer.blend) as GlobalCompositeOperation,
     draggable: !layer.locked,
     listening: !layer.locked,
-    ref: register,
     onMouseDown: () => useImageStore.getState().select(layer.id),
     onTap: () => useImageStore.getState().select(layer.id),
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
@@ -45,48 +68,51 @@ function commonProps(layer: Layer, register: Register): Record<string, unknown> 
         },
       });
     },
+    ...filterProps,
   };
 }
 
-function RasterNode({ layer, register }: NodeProps): JSX.Element | null {
-  const img = useHtmlImage(layer.type === "raster" ? layer.src : "");
-  if (layer.type !== "raster") return null;
-  return <KonvaImage {...commonProps(layer, register)} image={img} width={layer.width} height={layer.height} />;
+function RasterNode({ layer, register }: { layer: RasterLayer; register: Register }): JSX.Element {
+  const img = useHtmlImage(layer.src);
+  const ready = !!img;
+  const setRef = useCachedRef(
+    register,
+    hasAdjust(layer.adjust) && ready,
+    `${adjustKey(layer)}|${layer.width}x${layer.height}|${ready}`,
+  );
+  return <KonvaImage ref={setRef} {...commonProps(layer)} image={img} width={layer.width} height={layer.height} />;
 }
 
-function LayerNode({ layer, selected, register }: NodeProps): JSX.Element | null {
-  if (layer.type === "raster") return <RasterNode layer={layer} selected={selected} register={register} />;
-  if (layer.type === "text") {
-    return (
-      <Text
-        {...commonProps(layer, register)}
-        text={layer.text}
-        fontSize={layer.fontSize}
-        fontFamily={layer.fontFamily}
-        fill={layer.fill}
-      />
-    );
-  }
-  // shape
+function TextNode({ layer, register }: { layer: TextLayer; register: Register }): JSX.Element {
+  const setRef = useCachedRef(register, hasAdjust(layer.adjust), `${adjustKey(layer)}|${layer.text}|${layer.fontSize}`);
+  return (
+    <Text
+      ref={setRef}
+      {...commonProps(layer)}
+      text={layer.text}
+      fontSize={layer.fontSize}
+      fontFamily={layer.fontFamily}
+      fill={layer.fill}
+    />
+  );
+}
+
+function ShapeNode({ layer, register }: { layer: ShapeLayer; register: Register }): JSX.Element {
+  const setRef = useCachedRef(register, hasAdjust(layer.adjust), `${adjustKey(layer)}|${layer.width}x${layer.height}`);
+  const stroke = layer.strokeWidth > 0 ? layer.stroke : undefined;
   if (layer.shape === "rect") {
     return (
-      <Rect
-        {...commonProps(layer, register)}
-        width={layer.width}
-        height={layer.height}
-        fill={layer.fill}
-        stroke={layer.strokeWidth > 0 ? layer.stroke : undefined}
-        strokeWidth={layer.strokeWidth}
-      />
+      <Rect ref={setRef} {...commonProps(layer)} width={layer.width} height={layer.height} fill={layer.fill} stroke={stroke} strokeWidth={layer.strokeWidth} />
     );
   }
   return (
     <Shape
-      {...commonProps(layer, register)}
+      ref={setRef}
+      {...commonProps(layer)}
       width={layer.width}
       height={layer.height}
       fill={layer.fill}
-      stroke={layer.strokeWidth > 0 ? layer.stroke : undefined}
+      stroke={stroke}
       strokeWidth={layer.strokeWidth}
       sceneFunc={(ctx, shape) => {
         const w = layer.width;
@@ -98,6 +124,12 @@ function LayerNode({ layer, selected, register }: NodeProps): JSX.Element | null
       }}
     />
   );
+}
+
+function LayerNode({ layer, register }: { layer: Layer; register: Register }): JSX.Element {
+  if (layer.type === "raster") return <RasterNode layer={layer} register={register} />;
+  if (layer.type === "text") return <TextNode layer={layer} register={register} />;
+  return <ShapeNode layer={layer} register={register} />;
 }
 
 export function ImageStage(): JSX.Element {
@@ -144,21 +176,11 @@ export function ImageStage(): JSX.Element {
         }}
       >
         <KonvaLayer x={offsetX} y={offsetY} scaleX={scale} scaleY={scale}>
-          <Rect
-            x={0}
-            y={0}
-            width={doc.width}
-            height={doc.height}
-            fill="#ffffff"
-            shadowBlur={12}
-            shadowOpacity={0.18}
-            listening={false}
-          />
+          <Rect x={0} y={0} width={doc.width} height={doc.height} fill="#ffffff" shadowBlur={12} shadowOpacity={0.18} listening={false} />
           {doc.layers.map((layer) => (
             <LayerNode
               key={layer.id}
               layer={layer}
-              selected={doc.selectedId === layer.id}
               register={(n) => {
                 if (n) nodeRefs.current.set(layer.id, n);
                 else nodeRefs.current.delete(layer.id);

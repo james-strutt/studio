@@ -4,6 +4,7 @@ import { useImageStore } from "@/editors/image/useImageStore";
 import { ImageToolbar } from "@/editors/image/ImageToolbar";
 import { ImageStage } from "@/editors/image/ImageStage";
 import { ImageLayersPanel } from "@/editors/image/ImageLayersPanel";
+import { ImageAdjustPanel } from "@/editors/image/ImageAdjustPanel";
 import { dispatch } from "@/commands/history";
 
 function importFile(file: File, name = file.name): void {
@@ -41,7 +42,10 @@ export function ImageEditor(): JSX.Element {
       {doc ? (
         <div className="img-body">
           <ImageStage />
-          <ImageLayersPanel />
+          <div className="img-right">
+            <ImageLayersPanel />
+            <ImageAdjustPanel />
+          </div>
         </div>
       ) : (
         <div className="img-empty">

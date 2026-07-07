@@ -9,6 +9,9 @@ import {
   resizeImage,
   flipCanvas,
   rotateCanvas,
+  hasAdjust,
+  DEFAULT_ADJUST,
+  ADJUST_PRESETS,
   type ImageDoc,
   type ShapeLayer,
 } from "@/editors/image/imageModel";
@@ -79,5 +82,19 @@ describe("document transforms", () => {
     // (x,y)=(30,40) -> (H - y, x) = (300 - 40, 30)
     expect([out.layers[0].x, out.layers[0].y]).toEqual([260, 30]);
     expect(out.layers[0].rotation).toBe(90);
+  });
+});
+
+describe("adjustments", () => {
+  it("hasAdjust is false for defaults, true when any value is set", () => {
+    expect(hasAdjust(undefined)).toBe(false);
+    expect(hasAdjust(DEFAULT_ADJUST)).toBe(false);
+    expect(hasAdjust({ ...DEFAULT_ADJUST, contrast: 10 })).toBe(true);
+  });
+
+  it("every preset is a full adjust object, and Reset clears", () => {
+    const reset = ADJUST_PRESETS.find((p) => p.name === "Reset")!;
+    expect(hasAdjust(reset.adjust)).toBe(false);
+    expect(ADJUST_PRESETS.every((p) => Object.keys(p.adjust).length === 6)).toBe(true);
   });
 });

@@ -12,6 +12,39 @@ export type BlendMode =
 
 export type LayerType = "raster" | "text" | "shape";
 
+/** Non-destructive per-layer adjustment amounts (native filter param ranges). */
+export interface LayerAdjust {
+  exposure: number; // Brighten brightness, -1..1
+  contrast: number; // Contrast, -100..100
+  saturation: number; // HSL saturation, -2..2
+  temperature: number; // custom warm/cool, -1..1
+  sharpen: number; // custom, 0..1
+  vignette: number; // custom, 0..1
+}
+
+export const DEFAULT_ADJUST: LayerAdjust = {
+  exposure: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  sharpen: 0,
+  vignette: 0,
+};
+
+export function hasAdjust(a?: LayerAdjust): boolean {
+  return !!a && Object.values(a).some((v) => v !== 0);
+}
+
+/** One-click filter looks built from adjustment presets. */
+export const ADJUST_PRESETS: { name: string; adjust: LayerAdjust }[] = [
+  { name: "Reset", adjust: DEFAULT_ADJUST },
+  { name: "Vivid", adjust: { ...DEFAULT_ADJUST, contrast: 22, saturation: 0.6 } },
+  { name: "B&W", adjust: { ...DEFAULT_ADJUST, saturation: -2, contrast: 12 } },
+  { name: "Warm", adjust: { ...DEFAULT_ADJUST, temperature: 0.4, exposure: 0.05 } },
+  { name: "Cool", adjust: { ...DEFAULT_ADJUST, temperature: -0.4 } },
+  { name: "Fade", adjust: { ...DEFAULT_ADJUST, contrast: -16, exposure: 0.08, saturation: -0.4, vignette: 0.2 } },
+];
+
 interface BaseLayer {
   id: string;
   type: LayerType;
@@ -25,6 +58,7 @@ interface BaseLayer {
   rotation: number;
   scaleX: number;
   scaleY: number;
+  adjust?: LayerAdjust;
 }
 
 export interface RasterLayer extends BaseLayer {
