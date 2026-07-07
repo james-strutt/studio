@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
+import { fixedPosition } from "@/lib/pointer";
 import { ANNOT_COLORS, DEFAULT_ANNOT_COLOR } from "@/editors/pdf/annotColors";
 import type { MarkupGroup, MarkupSubtype, Rect } from "@/editors/pdf/pdfAnnotations";
 
@@ -63,7 +64,8 @@ export function PdfMarkupLayer({
       return;
     }
     const b = range.getBoundingClientRect();
-    setPos({ x: Math.max(8, b.left), y: Math.max(8, b.top - 46) });
+    const p = fixedPosition(b.left, b.top);
+    setPos({ x: Math.max(8, p.x), y: Math.max(8, p.y - 46) });
   }, [scrollRef]);
 
   useEffect(() => {

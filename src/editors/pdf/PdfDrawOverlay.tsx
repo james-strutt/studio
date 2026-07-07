@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
+import { localPoint } from "@/lib/pointer";
 import { usePdfStore, type AnnotTool } from "@/editors/pdf/pdfStore";
 import { ANNOT_COLORS, DEFAULT_ANNOT_COLOR } from "@/editors/pdf/annotColors";
 import { pathLength, polygonArea, formatMeasure } from "@/editors/pdf/measureMath";
@@ -57,10 +58,8 @@ export function PdfDrawOverlay({
 
   const rgb = color.rgb;
   const strokePx = Math.max(1, widthPt * scale);
-  const local = (e: React.PointerEvent | React.MouseEvent): Pt => {
-    const r = ref.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
+  const local = (e: React.PointerEvent | React.MouseEvent): Pt =>
+    localPoint(ref.current!, e.clientX, e.clientY);
   const toX = (x: number): number => x / scale;
   const toY = (y: number): number => pageHeightPts - y / scale;
 

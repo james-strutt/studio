@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
+import { localPoint, localScale } from "@/lib/pointer";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import {
@@ -231,12 +232,11 @@ export function Timeline(): JSX.Element | null {
       if (!e.ctrlKey) return;
       e.preventDefault();
       const current = useVideoStore.getState().pxPerSecond;
-      const rect = el.getBoundingClientRect();
-      const cursorPx = e.clientX - rect.left + el.scrollLeft;
-      const anchorTime = pxToTime(cursorPx, current);
+      const cursor = localPoint(el, e.clientX, e.clientY);
+      const anchorTime = pxToTime(cursor.x + el.scrollLeft, current);
       const next = clampZoom(current * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
       useVideoStore.getState().setZoom(next);
-      el.scrollLeft = timeToPx(anchorTime, next) - (e.clientX - rect.left);
+      el.scrollLeft = timeToPx(anchorTime, next) - cursor.x;
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -247,10 +247,9 @@ export function Timeline(): JSX.Element | null {
   const width = timeToPx(contentSeconds(shown), pps);
 
   const seekFromEvent = (e: React.PointerEvent): void => {
-    const canvas = scrollRef.current?.querySelector(".tl-canvas");
+    const canvas = scrollRef.current?.querySelector<HTMLElement>(".tl-canvas");
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    playbackEngine.seek(pxToTime(e.clientX - rect.left, pps));
+    playbackEngine.seek(pxToTime(localPoint(canvas, e.clientX, e.clientY).x, pps));
   };
 
   const onClipPointerDown = (e: React.PointerEvent, clip: Clip): void => {
@@ -300,13 +299,19 @@ export function Timeline(): JSX.Element | null {
   const onClipPointerMove = (e: React.PointerEvent): void => {
     const drag = dragRef.current;
     if (!drag || e.buttons !== 1) return;
-    const dt = pxToTime(e.clientX - drag.downX, pps);
+    const canvas = scrollRef.current?.querySelector<HTMLElement>(".tl-canvas");
+    const s = canvas ? localScale(canvas) : { x: 1, y: 1 };
+    const dt = pxToTime((e.clientX - drag.downX) * s.x, pps);
     if (!drag.moved && Math.abs(e.clientX - drag.downX) + Math.abs(e.clientY - drag.downY) < 3) return;
     drag.moved = true;
-    const canvas = scrollRef.current?.querySelector(".tl-canvas");
-    const rect = canvas?.getBoundingClientRect();
-    const laneIndex = rect
-      ? Math.max(0, Math.min(project.tracks.length - 1, Math.floor((e.clientY - rect.top - RULER_HEIGHT) / LANE_HEIGHT)))
+    const laneIndex = canvas
+      ? Math.max(
+          0,
+          Math.min(
+            project.tracks.length - 1,
+            Math.floor((localPoint(canvas, e.clientX, e.clientY).y - RULER_HEIGHT) / LANE_HEIGHT),
+          ),
+        )
       : drag.origTrackIndex;
     setPreview(previewDrag(project, drag, dt, laneIndex, pps));
   };

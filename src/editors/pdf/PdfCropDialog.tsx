@@ -3,6 +3,7 @@ import type { RenderTask } from "pdfjs-dist";
 import { Modal } from "@/shell/Modal";
 import { dispatch } from "@/commands/history";
 import { usePdfStore, type PdfDoc } from "@/editors/pdf/pdfStore";
+import { localPoint } from "@/lib/pointer";
 import { cropRectToPdfBox } from "@/editors/pdf/cropMath";
 
 const MAX_W = 480;
@@ -81,9 +82,10 @@ export function PdfCropDialog({ doc, onClose }: { doc: PdfDoc; onClose: () => vo
   // Pointer drag: move / draw / corner-resize.
   useEffect(() => {
     const point = (e: PointerEvent): { x: number; y: number } => {
-      const rc = containerRef.current?.getBoundingClientRect();
-      if (!rc) return { x: 0, y: 0 };
-      return { x: clamp(e.clientX - rc.left, 0, imgW), y: clamp(e.clientY - rc.top, 0, imgH) };
+      const el = containerRef.current;
+      if (!el) return { x: 0, y: 0 };
+      const p = localPoint(el, e.clientX, e.clientY);
+      return { x: clamp(p.x, 0, imgW), y: clamp(p.y, 0, imgH) };
     };
     const onMove = (e: PointerEvent): void => {
       const d = dragRef.current;
@@ -131,9 +133,10 @@ export function PdfCropDialog({ doc, onClose }: { doc: PdfDoc; onClose: () => vo
 
   const startDrag = (mode: Drag["mode"]) => (e: React.PointerEvent) => {
     e.stopPropagation();
-    const rc = containerRef.current?.getBoundingClientRect();
-    const px = rc ? clamp(e.clientX - rc.left, 0, imgW) : 0;
-    const py = rc ? clamp(e.clientY - rc.top, 0, imgH) : 0;
+    const el = containerRef.current;
+    const p = el ? localPoint(el, e.clientX, e.clientY) : { x: 0, y: 0 };
+    const px = clamp(p.x, 0, imgW);
+    const py = clamp(p.y, 0, imgH);
     dragRef.current = { mode, startX: px, startY: py, start: { ...rect } };
     if (mode === "draw") setRect({ x: px, y: py, w: 0, h: 0 });
   };

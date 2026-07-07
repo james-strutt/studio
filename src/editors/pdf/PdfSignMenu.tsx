@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { dispatch } from "@/commands/history";
+import { fixedPosition } from "@/lib/pointer";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 import {
   listSignatures,
@@ -23,7 +24,10 @@ export function PdfSignMenu(): JSX.Element {
   const toggle = (): void => {
     if (!open) {
       const r = btnRef.current?.getBoundingClientRect();
-      if (r) setPos({ left: r.left, top: r.bottom + 4 });
+      if (r) {
+        const p = fixedPosition(r.left, r.bottom);
+        setPos({ left: p.x, top: p.y + 4 });
+      }
     }
     setOpen((o) => !o);
   };

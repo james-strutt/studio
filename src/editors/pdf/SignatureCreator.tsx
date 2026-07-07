@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Modal } from "@/shell/Modal";
 import { getFileService } from "@/files/fileService";
+import { localPoint } from "@/lib/pointer";
 import { saveSignature, type StoredSignature } from "@/editors/pdf/signatureStore";
 
 type Mode = "draw" | "type" | "upload";
@@ -35,8 +36,8 @@ export function SignatureCreator({
 
   const ctx = (): CanvasRenderingContext2D | null => canvasRef.current?.getContext("2d") ?? null;
   const posn = (e: React.PointerEvent): [number, number] => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top];
+    const p = localPoint(canvasRef.current!, e.clientX, e.clientY);
+    return [p.x, p.y];
   };
   const down = (e: React.PointerEvent): void => {
     const c = ctx();

@@ -21,5 +21,6 @@ interface Window {
   studio?: StudioBridge;
   studioDev?: {
     openPdf: (name: string, bytes: Uint8Array) => Promise<string>;
+    dispatchCommand: (id: string, args: unknown) => Promise<unknown>;
   };
 }

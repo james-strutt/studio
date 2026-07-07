@@ -14,6 +14,7 @@ import "@/editors/image/imageCommands";
 import "@/editors/video/videoCommands";
 import { App } from "@/App";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
+import { dispatch } from "@/commands/history";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
@@ -23,6 +24,7 @@ if (!root) throw new Error("Missing #root element");
 if (import.meta.env.DEV) {
   window.studioDev = {
     openPdf: (name, bytes) => usePdfStore.getState().openBytes(name, bytes),
+    dispatchCommand: (id, args) => dispatch(id, args),
   };
 }
 
