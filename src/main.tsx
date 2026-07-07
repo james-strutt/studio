@@ -9,6 +9,7 @@ import "@/editors/pdf/pdfPageCommands";
 import "@/editors/pdf/pdfOutputCommands";
 import "@/editors/pdf/pdfAnnotationCommands";
 import "@/editors/pdf/pdfFormCommands";
+import "@/editors/image/imageCommands";
 import { App } from "@/App";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 
