@@ -5,8 +5,19 @@ import { getFileService } from "@/files/fileService";
 import { downloadFile } from "@/files/download";
 import { imagesToPdf, pdfToText, pdfToImages, rasterCompress, compressToTarget } from "@/editors/pdf/pdfConvert";
 import { mutateActive, undoMutation } from "@/editors/pdf/pdfMutate";
+import { addPassword, removePassword, type Permissions } from "@/editors/pdf/pdfSecurity";
 
 const noArgs = z.object({});
+const permsSchema = z.object({
+  print: z.boolean(),
+  modify: z.boolean(),
+  copy: z.boolean(),
+  annotate: z.boolean(),
+  fillForms: z.boolean(),
+  extract: z.boolean(),
+  assemble: z.boolean(),
+  printHighRes: z.boolean(),
+});
 
 // Save/export produce a file on disk from the active document's current bytes.
 // They do not mutate the document, so they carry no undo entry. Saving marks
@@ -79,6 +90,39 @@ registerCommand({
     return mutateActive(() => rasterCompress(d.doc, { dpi, quality }));
   },
   undo: undoMutation,
+});
+
+// Encryption is an export: it saves a protected copy and leaves the working
+// document decrypted (pdf.js can't render an encrypted doc without the password).
+registerCommand({
+  id: "pdf.addPassword",
+  title: "Protect PDF with a password",
+  editor: "pdf",
+  schema: z.object({
+    userPassword: z.string().optional(),
+    ownerPassword: z.string().optional(),
+    permissions: permsSchema.optional(),
+  }),
+  run: async (opts) => {
+    const d = usePdfStore.getState().getActive();
+    if (!d) return;
+    const enc = await addPassword(d.bytes, opts as { permissions?: Permissions });
+    const base = d.name.replace(/\.pdf$/i, "");
+    await getFileService().save(`${base}-protected.pdf`, enc);
+  },
+});
+
+registerCommand({
+  id: "pdf.removePassword",
+  title: "Remove PDF password",
+  editor: "pdf",
+  schema: z.object({ password: z.string() }),
+  run: async ({ password }) => {
+    const file = await getFileService().open({ accept: [".pdf"] });
+    if (!file) return;
+    const dec = await removePassword(file.data, password);
+    await usePdfStore.getState().openBytes(file.name.replace(/\.pdf$/i, "-unlocked.pdf"), dec);
+  },
 });
 
 registerCommand({

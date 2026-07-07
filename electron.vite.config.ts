@@ -17,6 +17,7 @@ export default defineConfig({
     root: __dirname,
     resolve: { alias: { "@": src } },
     plugins: [react()],
-    build: { rollupOptions: { input: resolve(__dirname, "index.html") } },
+    // es2022 so mupdf's top-level await compiles (matches vite.config.ts).
+    build: { target: "es2022", rollupOptions: { input: resolve(__dirname, "index.html") } },
   },
 });

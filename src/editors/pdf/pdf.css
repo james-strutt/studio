@@ -619,6 +619,12 @@
   font-weight: 600;
 }
 
+.pdf-perms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px var(--space-3);
+}
+
 .pdf-poly-finish {
   position: absolute;
   left: var(--space-2);

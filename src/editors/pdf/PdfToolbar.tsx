@@ -5,6 +5,7 @@ import { PdfSplitDialog } from "@/editors/pdf/PdfSplitDialog";
 import { PdfMergeDialog } from "@/editors/pdf/PdfMergeDialog";
 import { PdfCropDialog } from "@/editors/pdf/PdfCropDialog";
 import { PdfContentDialog } from "@/editors/pdf/PdfContentDialog";
+import { PdfProtectDialog } from "@/editors/pdf/PdfProtectDialog";
 
 export function PdfToolbar(): JSX.Element {
   const doc = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
@@ -14,6 +15,7 @@ export function PdfToolbar(): JSX.Element {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [protectOpen, setProtectOpen] = useState(false);
 
   return (
     <div className="pdf-toolbar">
@@ -83,6 +85,9 @@ export function PdfToolbar(): JSX.Element {
           <button className="btn btn-quiet" onClick={() => setSetupOpen(true)}>
             Page setup…
           </button>
+          <button className="btn btn-quiet" onClick={() => setProtectOpen(true)}>
+            Protect…
+          </button>
           <span className="pdf-page-label">
             {doc.currentPage} / {doc.numPages}
           </span>
@@ -92,6 +97,7 @@ export function PdfToolbar(): JSX.Element {
       {doc && splitOpen && <PdfSplitDialog doc={doc} onClose={() => setSplitOpen(false)} />}
       {doc && mergeOpen && <PdfMergeDialog doc={doc} onClose={() => setMergeOpen(false)} />}
       {doc && setupOpen && <PdfContentDialog onClose={() => setSetupOpen(false)} />}
+      {doc && protectOpen && <PdfProtectDialog onClose={() => setProtectOpen(false)} />}
     </div>
   );
 }
