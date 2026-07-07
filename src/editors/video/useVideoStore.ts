@@ -12,12 +12,14 @@ interface VideoStore {
   playing: boolean;
   selectedClipId: string | null;
   proxyStatus: Record<string, ProxyStatus>;
+  pxPerSecond: number;
   createProject: () => void;
   setProject: (p: VideoProject) => void;
   setPlayhead: (t: number) => void;
   setPlaying: (b: boolean) => void;
   selectClip: (id: string | null) => void;
   setProxyStatus: (sourceId: string, status: ProxyStatus) => void;
+  setZoom: (pxPerSecond: number) => void;
   getProject: () => VideoProject | null;
 }
 
@@ -27,6 +29,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   playing: false,
   selectedClipId: null,
   proxyStatus: {},
+  pxPerSecond: 50,
   createProject: () => set({ project: emptyProject(), playhead: 0, selectedClipId: null }),
   setProject: (project) => set({ project }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
@@ -34,5 +37,6 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   selectClip: (selectedClipId) => set({ selectedClipId }),
   setProxyStatus: (sourceId, status) =>
     set((s) => ({ proxyStatus: { ...s.proxyStatus, [sourceId]: status } })),
+  setZoom: (pxPerSecond) => set({ pxPerSecond }),
   getProject: () => get().project,
 }));

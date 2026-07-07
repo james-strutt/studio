@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import "@/editors/video/video.css";
 import { useVideoStore, type ProxyStatus } from "@/editors/video/useVideoStore";
 import { VideoPreview } from "@/editors/video/VideoPreview";
+import { Timeline } from "@/editors/video/Timeline";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
 import { dispatch } from "@/commands/history";
@@ -48,9 +49,18 @@ export function VideoEditor(): JSX.Element {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.code !== "Space" || isTypingTarget(e.target)) return;
-      e.preventDefault();
-      playbackEngine.togglePlay();
+      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey) return;
+      const s = useVideoStore.getState();
+      if (e.code === "Space") {
+        e.preventDefault();
+        playbackEngine.togglePlay();
+      } else if (e.key === "m" && s.project) {
+        void dispatch("video.addMarker", {});
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && s.project) {
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 1 / s.project.fps;
+        playbackEngine.seek(s.playhead + (e.key === "ArrowLeft" ? -step : step));
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -73,7 +83,10 @@ export function VideoEditor(): JSX.Element {
         )}
       </div>
       {project ? (
-        <VideoPreview />
+        <>
+          <VideoPreview />
+          <Timeline />
+        </>
       ) : (
         <div className="vid-empty">
           <div className="placeholder">

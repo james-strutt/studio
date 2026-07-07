@@ -37,6 +37,11 @@ export interface Track {
   muted: boolean;
 }
 
+export interface Marker {
+  id: string;
+  time: number;
+}
+
 export interface VideoProject {
   id: string;
   name: string;
@@ -46,6 +51,7 @@ export interface VideoProject {
   tracks: Track[];
   clips: Clip[];
   sources: MediaSource[];
+  markers: Marker[];
 }
 
 export const clipDuration = (c: Clip): number => Math.max(0, c.outPoint - c.inPoint);
@@ -99,6 +105,22 @@ export function emptyProject(name = "Untitled", width = 1920, height = 1080, fps
     ],
     clips: [],
     sources: [],
+    markers: [],
+  };
+}
+
+export function addMarker(project: VideoProject, time: number): VideoProject {
+  return { ...project, markers: [...project.markers, { id: id("mark"), time }] };
+}
+
+export function removeMarker(project: VideoProject, markerId: string): VideoProject {
+  return { ...project, markers: project.markers.filter((m) => m.id !== markerId) };
+}
+
+export function setTrackMuted(project: VideoProject, trackId: string, muted: boolean): VideoProject {
+  return {
+    ...project,
+    tracks: project.tracks.map((t) => (t.id === trackId ? { ...t, muted } : t)),
   };
 }
 

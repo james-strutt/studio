@@ -9,9 +9,12 @@ import { storeMediaBlob, relinkProjectMedia } from "@/editors/video/videoPersist
 import { serialiseProject, deserialiseProject } from "@/editors/video/videoProject";
 import {
   addClip,
+  addMarker,
   addSource,
   makeClip,
   newId,
+  removeMarker,
+  setTrackMuted,
   trackEnd,
   tracksOfKind,
   type MediaSource,
@@ -137,6 +140,38 @@ registerCommand({
   shortcut: "Space",
   schema: z.object({}),
   run: () => playbackEngine.togglePlay(),
+});
+
+registerCommand({
+  id: "video.addMarker",
+  title: "Add marker at playhead",
+  editor: "video",
+  shortcut: "M",
+  schema: z.object({ time: z.number().optional() }),
+  run: ({ time }) => mutateProject((p) => addMarker(p, time ?? useVideoStore.getState().playhead)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.removeMarker",
+  title: "Remove marker",
+  editor: "video",
+  schema: z.object({ markerId: z.string() }),
+  run: ({ markerId }) => mutateProject((p) => removeMarker(p, markerId)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.toggleTrackMute",
+  title: "Mute / unmute track",
+  editor: "video",
+  schema: z.object({ trackId: z.string() }),
+  run: ({ trackId }) =>
+    mutateProject((p) => {
+      const track = p.tracks.find((t) => t.id === trackId);
+      return track ? setTrackMuted(p, trackId, !track.muted) : p;
+    }),
+  undo: undoProject,
 });
 
 registerCommand({

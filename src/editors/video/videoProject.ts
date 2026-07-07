@@ -37,6 +37,7 @@ export function deserialiseProject(data: SerialisedProject): VideoProject {
   }
   const project: VideoProject = {
     ...data.project,
+    markers: data.project.markers ?? [],
     sources: data.project.sources.map((s) => ({ ...s, url: "" })),
   };
   bumpIdCounterPast(project);
