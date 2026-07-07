@@ -25,6 +25,30 @@ export interface ClipText {
   color: string;
   x: number; // 0..1 of project width (centre of text)
   y: number; // 0..1 of project height (baseline anchor)
+  font?: string; // canvas font family
+}
+
+export interface ClipCrop {
+  x: number; // fractions of the source frame
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface PanZoom {
+  fromScale: number;
+  toScale: number;
+  fromX: number; // offsets as fractions of project width/height
+  fromY: number;
+  toX: number;
+  toY: number;
+}
+
+export type TransitionType = "dissolve" | "wipe" | "slide";
+
+export interface Transition {
+  type: TransitionType;
+  duration: number; // seconds, measured into this clip
 }
 
 export interface Clip {
@@ -37,6 +61,9 @@ export interface Clip {
   volume: number; // 0..1
   transform?: ClipTransform;
   text?: ClipText;
+  crop?: ClipCrop;
+  panZoom?: PanZoom;
+  transition?: Transition; // transition INTO this clip from the previous abutting clip
 }
 
 export function makeClipText(content: string): ClipText {
@@ -335,6 +362,85 @@ export function setClipText(project: VideoProject, clipId: string, text: ClipTex
     ...project,
     clips: project.clips.map((c) => (c.id === clipId ? { ...c, text: text ?? undefined } : c)),
   };
+}
+
+/** Patch presentation fields on one clip (undefined leaves a field alone, null clears it). */
+export function patchClip(
+  project: VideoProject,
+  clipId: string,
+  patch: {
+    transform?: ClipTransform | null;
+    crop?: ClipCrop | null;
+    panZoom?: PanZoom | null;
+    transition?: Transition | null;
+    volume?: number;
+  },
+): VideoProject {
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const next = { ...c };
+      for (const key of ["transform", "crop", "panZoom", "transition"] as const) {
+        const value = patch[key];
+        if (value === null) delete next[key];
+        else if (value !== undefined) (next as Record<string, unknown>)[key] = value;
+      }
+      if (patch.volume !== undefined) next.volume = patch.volume;
+      return next;
+    }),
+  };
+}
+
+const ABUT_EPSILON = 1e-6;
+
+/** The clip on the same track that ends exactly where this clip starts. */
+export function previousAbutting(project: VideoProject, clip: Clip): Clip | null {
+  return (
+    project.clips.find(
+      (c) =>
+        c.id !== clip.id &&
+        c.trackId === clip.trackId &&
+        Math.abs(clipEnd(c) - clip.start) < ABUT_EPSILON,
+    ) ?? null
+  );
+}
+
+/** 0..1 progress through the clip's incoming transition at time t, or null when outside it. */
+export function transitionProgress(clip: Clip, t: number): number | null {
+  if (!clip.transition || clip.transition.duration <= 0) return null;
+  const p = (t - clip.start) / clip.transition.duration;
+  return p >= 0 && p < 1 ? p : null;
+}
+
+/** 0..1 progress through the whole clip (for Ken Burns interpolation). */
+export function clipProgress(clip: Clip, t: number): number {
+  const d = clipDuration(clip);
+  return d <= 0 ? 0 : Math.max(0, Math.min(1, (t - clip.start) / d));
+}
+
+/** How far past outPoint this clip's video must decode to feed the next clip's transition. */
+export function transitionTail(project: VideoProject, clip: Clip): number {
+  const next = project.clips.find(
+    (c) =>
+      c.id !== clip.id &&
+      c.trackId === clip.trackId &&
+      Math.abs(c.start - clipEnd(clip)) < ABUT_EPSILON &&
+      c.transition,
+  );
+  return next?.transition?.duration ?? 0;
+}
+
+/** Get (or create) the first track of a kind. */
+export function ensureTrack(
+  project: VideoProject,
+  kind: TrackKind,
+  name: string,
+): { project: VideoProject; trackId: string } {
+  const existing = tracksOfKind(project, kind)[0];
+  if (existing) return { project, trackId: existing.id };
+  const track: Track = { id: id(kind), kind, name, muted: false };
+  return { project: { ...project, tracks: [...project.tracks, track] }, trackId: track.id };
 }
 
 /** Clips of one track in start order. */

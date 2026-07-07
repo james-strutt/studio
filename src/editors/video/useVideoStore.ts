@@ -16,6 +16,7 @@ interface VideoStore {
   proxyStatus: Record<string, ProxyStatus>;
   pxPerSecond: number;
   mode: VideoMode;
+  showSafeAreas: boolean;
   createProject: () => void;
   setProject: (p: VideoProject) => void;
   setPlayhead: (t: number) => void;
@@ -24,6 +25,7 @@ interface VideoStore {
   setProxyStatus: (sourceId: string, status: ProxyStatus) => void;
   setZoom: (pxPerSecond: number) => void;
   setMode: (mode: VideoMode) => void;
+  setShowSafeAreas: (b: boolean) => void;
   getProject: () => VideoProject | null;
 }
 
@@ -35,6 +37,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   proxyStatus: {},
   pxPerSecond: 50,
   mode: "storyboard",
+  showSafeAreas: false,
   createProject: () => set({ project: emptyProject(), playhead: 0, selectedClipId: null }),
   setProject: (project) => set({ project }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
@@ -44,5 +47,6 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
     set((s) => ({ proxyStatus: { ...s.proxyStatus, [sourceId]: status } })),
   setZoom: (pxPerSecond) => set({ pxPerSecond }),
   setMode: (mode) => set({ mode }),
+  setShowSafeAreas: (showSafeAreas) => set({ showSafeAreas }),
   getProject: () => get().project,
 }));

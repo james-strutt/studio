@@ -16,8 +16,10 @@ import {
   makeClip,
   moveClip,
   newId,
+  ensureTrack,
   makeClipText,
   packTrack,
+  patchClip,
   removeClip,
   removeMarker,
   reorderTrack,
@@ -267,6 +269,113 @@ registerCommand({
       if (!content) return setClipText(p, clipId, null);
       return setClipText(p, clipId, existing ? { ...existing, content } : makeClipText(content));
     }),
+  undo: undoProject,
+});
+
+const clipTextSchema = z.object({
+  content: z.string(),
+  size: z.number().positive(),
+  color: z.string(),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  font: z.string().optional(),
+});
+
+registerCommand({
+  id: "video.setClipTextStyle",
+  title: "Style clip title text",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), text: clipTextSchema.nullable() }),
+  run: ({ clipId, text }) =>
+    mutateProject((p) => setClipText(p, clipId, text?.content ? text : null)),
+  undo: undoProject,
+});
+
+const transformSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  scale: z.number().positive(),
+  rotation: z.number(),
+  opacity: z.number().min(0).max(1),
+});
+const cropSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().positive().max(1),
+  h: z.number().positive().max(1),
+});
+const panZoomSchema = z.object({
+  fromScale: z.number().positive(),
+  toScale: z.number().positive(),
+  fromX: z.number(),
+  fromY: z.number(),
+  toX: z.number(),
+  toY: z.number(),
+});
+
+registerCommand({
+  id: "video.setClipMotion",
+  title: "Set clip crop / transform / Ken Burns",
+  editor: "video",
+  schema: z.object({
+    clipId: z.string(),
+    transform: transformSchema.nullable().optional(),
+    crop: cropSchema.nullable().optional(),
+    panZoom: panZoomSchema.nullable().optional(),
+  }),
+  run: ({ clipId, ...patch }) => mutateProject((p) => patchClip(p, clipId, patch)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setTransition",
+  title: "Set transition into clip",
+  editor: "video",
+  schema: z.object({
+    clipId: z.string(),
+    type: z.enum(["cut", "dissolve", "wipe", "slide"]),
+    duration: z.number().positive().default(0.5),
+  }),
+  run: ({ clipId, type, duration }) =>
+    mutateProject((p) =>
+      patchClip(p, clipId, { transition: type === "cut" ? null : { type, duration } }),
+    ),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.addOverlay",
+  title: "Add image overlay at playhead",
+  editor: "video",
+  schema: z.object({}),
+  run: async () => {
+    const file = await getFileService().open({ accept: [".png", ".jpg", ".jpeg", ".webp"] });
+    if (!file) return null;
+    const store = useVideoStore.getState();
+    if (!store.getProject()) store.createProject();
+    const sourceId = newId("src");
+    const blob = new Blob([Uint8Array.from(file.data)], { type: mimeFor(file.name) });
+    const handle = await registerMedia(sourceId, blob);
+    void storeMediaBlob(sourceId, blob);
+    const source: MediaSource = {
+      id: sourceId,
+      name: file.name,
+      url: URL.createObjectURL(blob),
+      kind: handle.info.kind,
+      duration: 0,
+      width: handle.info.width,
+      height: handle.info.height,
+    };
+    const at = store.playhead;
+    const snap = mutateProject((p) => {
+      const { project, trackId } = ensureTrack(p, "overlay", "Overlay 1");
+      const clip = makeClip(trackId, sourceId, at, 0, IMAGE_CLIP_SECONDS);
+      clip.transform = { x: 0, y: 0, scale: 0.4, rotation: 0, opacity: 1 };
+      return addClip(addSource(project, source), clip);
+    });
+    void playbackEngine.renderStill();
+    return snap;
+  },
   undo: undoProject,
 });
 

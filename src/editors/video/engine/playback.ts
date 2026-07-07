@@ -2,21 +2,29 @@ import type { AudioBufferSink, CanvasSink, WrappedCanvas } from "mediabunny";
 import { useVideoStore } from "@/editors/video/useVideoStore";
 import {
   clipAt,
+  clipProgress,
+  previousAbutting,
   projectDuration,
   sourceTimeAt,
   tracksOfKind,
+  transitionProgress,
+  transitionTail,
   type Clip,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { getMedia } from "@/editors/video/engine/mediaCache";
-import { containRect, drawClipText } from "@/editors/video/engine/renderMath";
+import { drawClipText } from "@/editors/video/engine/renderMath";
+import { computeDrawSpec, paintSpec } from "@/editors/video/engine/clipRender";
+
+type FrameSource = ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Pumps decoded frames for one playing clip. A `for await` over the sink's
  * sequential iterator sleeps until each frame is due, then publishes it as
- * `latest` for the composite loop to draw.
+ * `latest` for the composite loop to draw. When the iterator ends (clip out
+ * point), `latest` keeps the last frame — a free freeze for transition tails.
  */
 class ClipVideoPlayer {
   latest: WrappedCanvas | null = null;
@@ -224,19 +232,28 @@ class PlaybackEngine {
     this.raf = requestAnimationFrame(this.loop);
   };
 
-  /** Start players for clips under the playhead, stop players for clips that left it. */
-  private reconcile(project: VideoProject, t: number): void {
+  /** Clips that must be live at time t: those under the playhead plus transition tails. */
+  private wantedClips(
+    project: VideoProject,
+    t: number,
+  ): Map<string, { clip: Clip; muted: boolean; visual: boolean }> {
     const wanted = new Map<string, { clip: Clip; muted: boolean; visual: boolean }>();
     for (const track of project.tracks) {
       const clip = clipAt(project, track.id, t);
-      if (clip) {
-        wanted.set(clip.id, {
-          clip,
-          muted: track.muted,
-          visual: track.kind === "video" || track.kind === "overlay",
-        });
+      if (!clip) continue;
+      const visual = track.kind !== "audio";
+      wanted.set(clip.id, { clip, muted: track.muted, visual });
+      if (visual && transitionProgress(clip, t) !== null) {
+        const prev = previousAbutting(project, clip);
+        if (prev) wanted.set(prev.id, { clip: prev, muted: track.muted, visual });
       }
     }
+    return wanted;
+  }
+
+  /** Start players for wanted clips, stop players for clips that left the playhead. */
+  private reconcile(project: VideoProject, t: number): void {
+    const wanted = this.wantedClips(project, t);
     for (const [id, p] of this.players) {
       if (!wanted.has(id)) {
         p.video?.stop();
@@ -245,11 +262,17 @@ class PlaybackEngine {
       }
     }
     for (const [id, { clip, muted, visual }] of wanted) {
-      if (!this.players.has(id)) this.startPlayer(clip, muted, visual, t);
+      if (!this.players.has(id)) this.startPlayer(project, clip, muted, visual, t);
     }
   }
 
-  private startPlayer(clip: Clip, muted: boolean, visual: boolean, t: number): void {
+  private startPlayer(
+    project: VideoProject,
+    clip: Clip,
+    muted: boolean,
+    visual: boolean,
+    t: number,
+  ): void {
     const handle = getMedia(clip.sourceId);
     if (!handle || handle.bitmap) {
       if (handle) this.players.set(clip.id, { video: null, audio: null });
@@ -258,8 +281,9 @@ class PlaybackEngine {
     const sourceStart = sourceTimeAt(clip, t);
     const sourceNow = (): number => sourceTimeAt(clip, this.playheadNow());
     const videoSink = visual ? (handle.proxy ?? handle.video) : null; // no video decode on audio lanes
+    const videoEnd = clip.outPoint + transitionTail(project, clip);
     const video = videoSink
-      ? new ClipVideoPlayer(videoSink, sourceStart, clip.outPoint, sourceNow)
+      ? new ClipVideoPlayer(videoSink, sourceStart, videoEnd, sourceNow)
       : null;
     const audio =
       handle.audio && !muted && clip.volume > 0 && this.audioCtx
@@ -275,30 +299,85 @@ class PlaybackEngine {
     this.players.set(clip.id, { video, audio });
   }
 
-  /** Composite the latest frame of every visible track onto the canvas (bottom track first). */
-  private drawFrame(project: VideoProject, t: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.canvas) return;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, project.width, project.height);
-    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
-      const clip = clipAt(project, track.id, t);
-      if (!clip) continue;
-      const handle = getMedia(clip.sourceId);
-      const frame = handle
-        ? (handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null)
-        : null;
-      if (frame) {
-        const r = containRect(frame.width, frame.height, project.width, project.height);
-        ctx.drawImage(frame, r.x, r.y, r.w, r.h);
-      }
-      if (clip.text) drawClipText(ctx, clip.text, project.width, project.height);
+  /** Draw one clip (media frame + title text) with a transition effect applied. */
+  private paintOne(
+    ctx: CanvasRenderingContext2D,
+    project: VideoProject,
+    clip: Clip,
+    t: number,
+    frameFor: (clip: Clip) => FrameSource | null,
+    alphaMult = 1,
+    dxExtra = 0,
+  ): void {
+    const frame = frameFor(clip);
+    if (frame) {
+      const spec = computeDrawSpec(
+        clip,
+        frame.width,
+        frame.height,
+        project.width,
+        project.height,
+        clipProgress(clip, t),
+      );
+      paintSpec(ctx, frame, spec, alphaMult, dxExtra);
+    }
+    if (clip.text) {
+      ctx.save();
+      ctx.globalAlpha = alphaMult;
+      ctx.translate(dxExtra, 0);
+      drawClipText(ctx, clip.text, project.width, project.height);
+      ctx.restore();
     }
   }
 
+  /** Composite all visual tracks at time t (bottom track first), honouring transitions. */
+  private paintTracks(
+    ctx: CanvasRenderingContext2D,
+    project: VideoProject,
+    t: number,
+    frameFor: (clip: Clip) => FrameSource | null,
+  ): void {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, project.width, project.height);
+    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
+      const incoming = clipAt(project, track.id, t);
+      if (!incoming) continue;
+      const p = transitionProgress(incoming, t);
+      if (p === null) {
+        this.paintOne(ctx, project, incoming, t, frameFor);
+        continue;
+      }
+      const prev = previousAbutting(project, incoming);
+      if (prev) this.paintOne(ctx, project, prev, t, frameFor);
+      const type = incoming.transition?.type;
+      if (type === "wipe") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, project.width * p, project.height);
+        ctx.clip();
+        this.paintOne(ctx, project, incoming, t, frameFor);
+        ctx.restore();
+      } else if (type === "slide") {
+        this.paintOne(ctx, project, incoming, t, frameFor, 1, (1 - p) * project.width);
+      } else {
+        this.paintOne(ctx, project, incoming, t, frameFor, p); // dissolve
+      }
+    }
+  }
+
+  private drawFrame(project: VideoProject, t: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.canvas) return;
+    this.paintTracks(ctx, project, t, (clip) => {
+      const handle = getMedia(clip.sourceId);
+      if (!handle) return null;
+      return handle.bitmap ?? this.players.get(clip.id)?.video?.latest?.canvas ?? null;
+    });
+  }
+
   /**
-   * Paused-state render: decode the exact frame under the playhead for each
-   * visible clip (frame-accurate seek), then draw all layers atomically.
+   * Paused-state render: decode the exact frame under the playhead for every
+   * visible clip (frame-accurate seek), then composite atomically.
    */
   async renderStill(): Promise<void> {
     const token = ++this.stillToken;
@@ -309,41 +388,23 @@ class PlaybackEngine {
     this.canvas.height = project.height;
     const t = useVideoStore.getState().playhead;
 
-    const draws: { frame?: CanvasImageSource; w?: number; h?: number; clip: Clip }[] = [];
-    for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
-      const clip = clipAt(project, track.id, t);
-      if (!clip) continue;
+    const frames = new Map<string, FrameSource>();
+    for (const { clip, visual } of this.wantedClips(project, t).values()) {
+      if (!visual) continue;
       const handle = getMedia(clip.sourceId);
-      const sink = handle ? (handle.proxy ?? handle.video) : null;
-      if (handle?.bitmap) {
-        draws.push({ frame: handle.bitmap, w: handle.bitmap.width, h: handle.bitmap.height, clip });
-      } else if (sink) {
-        const wrapped = await sink.getCanvas(sourceTimeAt(clip, t));
-        if (token !== this.stillToken) return; // superseded by a newer seek
-        if (wrapped) {
-          draws.push({
-            frame: wrapped.canvas,
-            w: wrapped.canvas.width,
-            h: wrapped.canvas.height,
-            clip,
-          });
-        } else {
-          draws.push({ clip });
-        }
-      } else if (clip.text) {
-        draws.push({ clip });
+      if (!handle) continue;
+      if (handle.bitmap) {
+        frames.set(clip.id, handle.bitmap);
+        continue;
       }
+      const sink = handle.proxy ?? handle.video;
+      if (!sink) continue;
+      const wrapped = await sink.getCanvas(sourceTimeAt(clip, t));
+      if (token !== this.stillToken) return; // superseded by a newer seek
+      if (wrapped) frames.set(clip.id, wrapped.canvas);
     }
     if (token !== this.stillToken) return;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, project.width, project.height);
-    for (const d of draws) {
-      if (d.frame && d.w && d.h) {
-        const r = containRect(d.w, d.h, project.width, project.height);
-        ctx.drawImage(d.frame, r.x, r.y, r.w, r.h);
-      }
-      if (d.clip.text) drawClipText(ctx, d.clip.text, project.width, project.height);
-    }
+    this.paintTracks(ctx, project, t, (clip) => frames.get(clip.id) ?? null);
   }
 }
 

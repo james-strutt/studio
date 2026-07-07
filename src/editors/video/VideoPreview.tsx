@@ -3,6 +3,17 @@ import { useVideoStore } from "@/editors/video/useVideoStore";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { formatTimecode, projectDuration } from "@/editors/video/videoModel";
 
+function SafeAreaGuides(): JSX.Element | null {
+  const show = useVideoStore((s) => s.showSafeAreas);
+  if (!show) return null;
+  return (
+    <>
+      <div className="vid-safe vid-safe-action" />
+      <div className="vid-safe vid-safe-title" />
+    </>
+  );
+}
+
 export function VideoPreview(): JSX.Element {
   const project = useVideoStore((s) => s.project);
   const playhead = useVideoStore((s) => s.playhead);
@@ -28,7 +39,15 @@ export function VideoPreview(): JSX.Element {
   return (
     <div className="vid-preview">
       <div className="vid-stage">
-        <canvas ref={canvasRef} className="vid-canvas" width={project.width} height={project.height} />
+        <div className="vid-canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            className="vid-canvas"
+            width={project.width}
+            height={project.height}
+          />
+          <SafeAreaGuides />
+        </div>
       </div>
       <div className="vid-transport">
         <button

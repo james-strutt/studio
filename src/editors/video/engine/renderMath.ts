@@ -16,7 +16,7 @@ export function drawClipText(
 ): void {
   if (!text.content) return;
   ctx.save();
-  ctx.font = `600 ${text.size}px "Instrument Sans Variable", sans-serif`;
+  ctx.font = `600 ${text.size}px ${text.font ?? '"Instrument Sans Variable", sans-serif'}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.lineJoin = "round";

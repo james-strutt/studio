@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "@/editors/video/video.css";
 import { useVideoStore, type ProxyStatus, type VideoMode } from "@/editors/video/useVideoStore";
 import { VideoPreview } from "@/editors/video/VideoPreview";
@@ -6,6 +6,8 @@ import { Timeline } from "@/editors/video/Timeline";
 import { Storyboard } from "@/editors/video/Storyboard";
 import { playbackEngine } from "@/editors/video/engine/playback";
 import { startAutosave, loadAutosave } from "@/editors/video/videoPersistence";
+import { ClipTextDialog, ClipMotionDialog } from "@/editors/video/ClipDialogs";
+import { previousAbutting } from "@/editors/video/videoModel";
 import { dispatch } from "@/commands/history";
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -33,15 +35,21 @@ function ProxyChip(): JSX.Element | null {
   return label ? <span className="vid-chip">{label}</span> : null;
 }
 
+const TRANSITION_TYPES = ["cut", "dissolve", "wipe", "slide"] as const;
+const TRANSITION_DURATIONS = [0.25, 0.5, 1, 2];
+
 function SelectedClipActions(): JSX.Element | null {
   const project = useVideoStore((s) => s.project);
   const selectedClipId = useVideoStore((s) => s.selectedClipId);
+  const [dialog, setDialog] = useState<"text" | "motion" | null>(null);
   if (!project || !selectedClipId) return null;
   const clip = project.clips.find((c) => c.id === selectedClipId);
   if (!clip) return null;
   const source = project.sources.find((s) => s.id === clip.sourceId);
   const track = project.tracks.find((t) => t.id === clip.trackId);
-  const canDetach = track?.kind !== "audio" && source?.kind === "video" && clip.volume > 0;
+  const visual = track?.kind !== "audio";
+  const canDetach = visual && source?.kind === "video" && clip.volume > 0;
+  const hasPrev = previousAbutting(project, clip) !== null;
   return (
     <>
       <button className="btn btn-quiet" onClick={() => void dispatch("video.splitAtPlayhead", {})}>
@@ -55,6 +63,60 @@ function SelectedClipActions(): JSX.Element | null {
           Detach audio
         </button>
       )}
+      {visual && (
+        <>
+          <button className="btn btn-quiet" onClick={() => setDialog("text")}>
+            Text…
+          </button>
+          <button className="btn btn-quiet" onClick={() => setDialog("motion")}>
+            Motion…
+          </button>
+        </>
+      )}
+      {visual && hasPrev && (
+        <>
+          <select
+            className="input vid-transition-select"
+            aria-label="Transition into this clip"
+            value={clip.transition?.type ?? "cut"}
+            onChange={(e) =>
+              void dispatch("video.setTransition", {
+                clipId: clip.id,
+                type: e.target.value,
+                duration: clip.transition?.duration ?? 0.5,
+              })
+            }
+          >
+            {TRANSITION_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          {clip.transition && (
+            <select
+              className="input vid-transition-select"
+              aria-label="Transition duration"
+              value={clip.transition.duration}
+              onChange={(e) =>
+                void dispatch("video.setTransition", {
+                  clipId: clip.id,
+                  type: clip.transition?.type ?? "dissolve",
+                  duration: Number(e.target.value),
+                })
+              }
+            >
+              {TRANSITION_DURATIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d}s
+                </option>
+              ))}
+            </select>
+          )}
+        </>
+      )}
+      {dialog === "text" && <ClipTextDialog clip={clip} onClose={() => setDialog(null)} />}
+      {dialog === "motion" && <ClipMotionDialog clip={clip} onClose={() => setDialog(null)} />}
     </>
   );
 }
@@ -113,6 +175,11 @@ export function VideoEditor(): JSX.Element {
         <button className="btn btn-quiet" onClick={() => void dispatch("video.importMedia", {})}>
           Import media
         </button>
+        {project && (
+          <button className="btn btn-quiet" onClick={() => void dispatch("video.addOverlay", {})}>
+            Add overlay
+          </button>
+        )}
         {project && (
           <div className="seg" role="group" aria-label="Editing mode">
             {MODES.map((m) => (
