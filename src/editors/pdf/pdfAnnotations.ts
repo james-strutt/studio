@@ -460,6 +460,69 @@ export async function addFreeText(
   return pdf.save();
 }
 
+/** Text stamp (/Stamp) — a bordered label like "APPROVED", centred in `rect`. */
+export async function addStampText(
+  bytes: Bytes,
+  pageIndex: number,
+  rect: Rect,
+  label: string,
+  color: RGB,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const [x0, y0, x1, y1] = rect;
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const fontSize = Math.min(h * 0.5, (w / Math.max(1, label.length)) * 1.6);
+  const textW = font.widthOfTextAtSize(label, fontSize);
+  const tx = x0 + (w - textW) / 2;
+  const ty = y0 + (h - fontSize) / 2 + fontSize * 0.12;
+  let c = `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} RG\n2 w\n`;
+  c += `${fmt(x0 + 1.5)} ${fmt(y0 + 1.5)} ${fmt(w - 3)} ${fmt(h - 3)} re\nS\n`;
+  c += `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg\n`;
+  c += `BT\n/F0 ${fmt(fontSize)} Tf\n${fmt(tx)} ${fmt(ty)} Td\n(${escPdfText(label)}) Tj\nET\n`;
+  const apRef = makeAppearance(pdf, rect, c, { Font: { F0: font.ref } });
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Stamp",
+    Rect: rect,
+    Name: "Approved",
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+  });
+  finishAnnotation(pdf, annot, apRef, { contents: label });
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/** Image stamp (/Stamp) drawing an embedded PNG/JPG in `rect`. */
+export async function addStampImage(
+  bytes: Bytes,
+  pageIndex: number,
+  rect: Rect,
+  imgBytes: Bytes,
+  isPng: boolean,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const img = isPng ? await pdf.embedPng(imgBytes) : await pdf.embedJpg(imgBytes);
+  const [x0, y0, x1, y1] = rect;
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const c = `q\n${fmt(w)} 0 0 ${fmt(h)} ${fmt(x0)} ${fmt(y0)} cm\n/Im0 Do\nQ\n`;
+  const apRef = makeAppearance(pdf, rect, c, { XObject: { Im0: img.ref } });
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Stamp",
+    Rect: rect,
+    F: F_PRINT,
+  });
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
 /** Read every annotation subtype on a page — used by tests and the comment list. */
 export function annotationSubtypes(pdf: PDFDocument, pageIndex: number): string[] {
   const annots = pdf.getPage(pageIndex).node.Annots();

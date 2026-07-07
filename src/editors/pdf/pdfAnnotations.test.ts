@@ -8,9 +8,19 @@ import {
   addPolygon,
   addTextNote,
   addFreeText,
+  addStampText,
+  addStampImage,
   annotationSubtypes,
   type Rect,
 } from "@/editors/pdf/pdfAnnotations";
+
+// 1x1 transparent PNG.
+const PNG_1PX = Uint8Array.from(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
 
 async function onePage(): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -127,5 +137,23 @@ describe("drawing annotations", () => {
     const a = firstAnnot(pdf);
     expect(a.has(PDFName.of("DA"))).toBe(true);
     expect(a.has(PDFName.of("AP"))).toBe(true);
+  });
+
+  it("writes a text Stamp with a label", async () => {
+    const out = await addStampText(await onePage(), 0, [100, 600, 260, 644], "APPROVED", {
+      r: 0.2,
+      g: 0.6,
+      b: 0.3,
+    });
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Stamp"]);
+    expect(firstAnnot(pdf).has(PDFName.of("AP"))).toBe(true);
+  });
+
+  it("writes an image Stamp embedding a PNG", async () => {
+    const out = await addStampImage(await onePage(), 0, [100, 600, 200, 700], PNG_1PX, true);
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Stamp"]);
+    expect(firstAnnot(pdf).has(PDFName.of("AP"))).toBe(true);
   });
 });

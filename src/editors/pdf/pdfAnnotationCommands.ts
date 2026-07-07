@@ -9,6 +9,8 @@ import {
   addPolygon,
   addTextNote,
   addFreeText,
+  addStampText,
+  addStampImage,
 } from "@/editors/pdf/pdfAnnotations";
 
 const rgbSchema = z.object({ r: z.number(), g: z.number(), b: z.number() });
@@ -132,5 +134,35 @@ registerCommand({
   }),
   run: ({ pageIndex, rect, contents, color, fontSize }) =>
     mutateActive((bytes) => addFreeText(bytes, pageIndex, rect, contents, color, fontSize)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.addStampText",
+  title: "Add stamp",
+  editor: "pdf",
+  schema: z.object({
+    pageIndex: pageIdx,
+    rect: rectSchema,
+    label: z.string(),
+    color: rgbSchema,
+  }),
+  run: ({ pageIndex, rect, label, color }) =>
+    mutateActive((bytes) => addStampText(bytes, pageIndex, rect, label, color)),
+  undo: undoMutation,
+});
+
+registerCommand({
+  id: "pdf.addStampImage",
+  title: "Add image stamp",
+  editor: "pdf",
+  schema: z.object({
+    pageIndex: pageIdx,
+    rect: rectSchema,
+    bytes: z.instanceof(Uint8Array),
+    isPng: z.boolean(),
+  }),
+  run: ({ pageIndex, rect, bytes, isPng }) =>
+    mutateActive((doc) => addStampImage(doc, pageIndex, rect, bytes, isPng)),
   undo: undoMutation,
 });

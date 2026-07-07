@@ -479,6 +479,76 @@
   z-index: 3;
 }
 
+/* ---- stamp dropdown ---- */
+.pdf-stamp-menu {
+  position: relative;
+}
+
+.pdf-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+}
+
+.pdf-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 141;
+  min-width: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-1);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-2);
+}
+
+.pdf-menu-label {
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  padding: var(--space-1) var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pdf-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  padding: var(--space-2);
+  border-radius: var(--r-1);
+  cursor: pointer;
+}
+
+.pdf-menu-item:hover {
+  background: var(--panel-2);
+}
+
+.pdf-menu-row {
+  display: flex;
+  align-items: center;
+}
+
+.pdf-menu-row .pdf-menu-item {
+  flex: 1;
+}
+
+.pdf-stamp-chip {
+  display: inline-block;
+  border: 2px solid;
+  border-radius: var(--r-1);
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
 /* Dark-mode page rendering: invert luminance and rotate hue so colours stay
    roughly recognisable. ponytail: images invert too; true per-object
    preservation needs render-time filtering, deferred. */

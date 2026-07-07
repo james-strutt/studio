@@ -1,5 +1,6 @@
 import { usePdfStore, type AnnotTool } from "@/editors/pdf/pdfStore";
 import { ANNOT_COLORS } from "@/editors/pdf/annotColors";
+import { PdfStampMenu } from "@/editors/pdf/PdfStampMenu";
 
 const TOOLS: { id: AnnotTool; label: string; glyph: string }[] = [
   { id: "select", label: "Select / text", glyph: "⌶" },
@@ -70,6 +71,8 @@ export function PdfAnnotToolbar(): JSX.Element {
       >
         {fill ? "Filled" : "Outline"}
       </button>
+      <span className="pdf-toolbar-sep" aria-hidden="true" />
+      <PdfStampMenu />
     </div>
   );
 }
