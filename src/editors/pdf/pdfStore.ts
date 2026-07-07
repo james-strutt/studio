@@ -56,6 +56,8 @@ interface PdfStore {
   annotColorId: string;
   annotWidth: number;
   annotFill: boolean;
+  ocrProgress: number | null;
+  setOcrProgress: (p: number | null) => void;
   setAnnotTool: (tool: AnnotTool) => void;
   setAnnotColorId: (id: string) => void;
   setAnnotWidth: (w: number) => void;
@@ -94,6 +96,8 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
   annotColorId: "amber",
   annotWidth: 2,
   annotFill: false,
+  ocrProgress: null,
+  setOcrProgress: (ocrProgress) => set({ ocrProgress }),
   setAnnotTool: (annotTool) => set({ annotTool }),
   setAnnotColorId: (annotColorId) => set({ annotColorId }),
   setAnnotWidth: (annotWidth) => set({ annotWidth }),

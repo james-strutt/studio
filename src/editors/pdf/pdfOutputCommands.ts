@@ -6,6 +6,7 @@ import { downloadFile } from "@/files/download";
 import { imagesToPdf, pdfToText, pdfToImages, rasterCompress, compressToTarget } from "@/editors/pdf/pdfConvert";
 import { mutateActive, undoMutation } from "@/editors/pdf/pdfMutate";
 import { addPassword, removePassword, type Permissions } from "@/editors/pdf/pdfSecurity";
+import { ocrPdf } from "@/editors/pdf/pdfOcr";
 
 const noArgs = z.object({});
 const permsSchema = z.object({
@@ -123,6 +124,23 @@ registerCommand({
     const dec = await removePassword(file.data, password);
     await usePdfStore.getState().openBytes(file.name.replace(/\.pdf$/i, "-unlocked.pdf"), dec);
   },
+});
+
+registerCommand({
+  id: "pdf.ocr",
+  title: "OCR — make scanned pages searchable",
+  editor: "pdf",
+  schema: noArgs,
+  run: () => {
+    const store = usePdfStore.getState();
+    const d = store.getActive();
+    if (!d) return null;
+    store.setOcrProgress(0);
+    return mutateActive(() => ocrPdf(d.bytes, d.doc, (p) => store.setOcrProgress(p))).finally(() =>
+      store.setOcrProgress(null),
+    );
+  },
+  undo: undoMutation,
 });
 
 registerCommand({

@@ -12,6 +12,7 @@ export function PdfToolbar(): JSX.Element {
   const doc = usePdfStore((s) => s.docs.find((d) => d.id === s.activeId));
   const sidebar = usePdfStore((s) => s.sidebar);
   const setSidebar = usePdfStore((s) => s.setSidebar);
+  const ocrProgress = usePdfStore((s) => s.ocrProgress);
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
@@ -92,6 +93,14 @@ export function PdfToolbar(): JSX.Element {
           </button>
           <button className="btn btn-quiet" onClick={() => setRedactOpen(true)}>
             Redact…
+          </button>
+          <button
+            className="btn btn-quiet"
+            disabled={ocrProgress !== null}
+            title="Make scanned pages searchable"
+            onClick={() => void dispatch("pdf.ocr", {})}
+          >
+            {ocrProgress !== null ? `OCR ${Math.round(ocrProgress * 100)}%` : "OCR"}
           </button>
           <span className="pdf-page-label">
             {doc.currentPage} / {doc.numPages}
