@@ -4,7 +4,7 @@ import { loadPdf, type PageSize } from "@/editors/pdf/pdfDocument";
 
 export type ZoomMode = "fit-width" | "fit-page" | "actual" | "custom";
 export type ViewMode = "single" | "two-up" | "spread";
-export type SidebarTab = "thumbnails" | "outline" | "search" | "comments";
+export type SidebarTab = "thumbnails" | "outline" | "search" | "comments" | "form";
 export type AnnotTool =
   | "select"
   | "ink"
