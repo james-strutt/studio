@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { PDFDocument, PDFName, PDFArray, PDFDict } from "pdf-lib";
-import { addTextMarkup, annotationSubtypes, type Rect } from "@/editors/pdf/pdfAnnotations";
+import {
+  addTextMarkup,
+  addInk,
+  addShape,
+  addLine,
+  addPolygon,
+  addTextNote,
+  addFreeText,
+  annotationSubtypes,
+  type Rect,
+} from "@/editors/pdf/pdfAnnotations";
 
 async function onePage(): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -57,5 +67,65 @@ describe("text markup annotations", () => {
     const a = firstAnnot(pdf);
     expect(a.has(PDFName.of("Contents"))).toBe(true);
     expect(a.has(PDFName.of("T"))).toBe(true);
+  });
+});
+
+describe("drawing annotations", () => {
+  const RED = { r: 0.9, g: 0.2, b: 0.2 };
+
+  it("writes an Ink annotation with an InkList and appearance", async () => {
+    const out = await addInk(await onePage(), 0, [[100, 100, 150, 160, 200, 120]], RED, 2);
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Ink"]);
+    const a = firstAnnot(pdf);
+    expect(a.lookup(PDFName.of("InkList"), PDFArray).size()).toBe(1);
+    expect(a.has(PDFName.of("AP"))).toBe(true);
+  });
+
+  it("writes Square and Circle shapes with fill (/IC)", async () => {
+    for (const kind of ["Square", "Circle"] as const) {
+      const out = await addShape(await onePage(), 0, kind, [100, 100, 300, 200], RED, 2, {
+        r: 1,
+        g: 1,
+        b: 0,
+      });
+      const pdf = await PDFDocument.load(out);
+      expect(annotationSubtypes(pdf, 0)).toEqual([kind]);
+      const a = firstAnnot(pdf);
+      expect(a.has(PDFName.of("IC"))).toBe(true);
+      expect(a.has(PDFName.of("AP"))).toBe(true);
+    }
+  });
+
+  it("writes a Line with arrowhead endings", async () => {
+    const out = await addLine(await onePage(), 0, [100, 100, 300, 200], RED, 2, true);
+    const pdf = await PDFDocument.load(out);
+    const a = firstAnnot(pdf);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Line"]);
+    expect(a.lookup(PDFName.of("L"), PDFArray).size()).toBe(4);
+    expect(a.lookup(PDFName.of("LE"), PDFArray).size()).toBe(2);
+  });
+
+  it("writes a closed Polygon with vertices", async () => {
+    const out = await addPolygon(await onePage(), 0, [100, 100, 200, 100, 150, 200], RED, 2);
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Polygon"]);
+    expect(firstAnnot(pdf).lookup(PDFName.of("Vertices"), PDFArray).size()).toBe(6);
+  });
+
+  it("writes a sticky Text note carrying its contents", async () => {
+    const out = await addTextNote(await onePage(), 0, 120, 700, "please review", RED);
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["Text"]);
+    expect(firstAnnot(pdf).has(PDFName.of("Contents"))).toBe(true);
+  });
+
+  it("writes a FreeText box with a /DA and appearance", async () => {
+    const out = await addFreeText(await onePage(), 0, [100, 600, 300, 700], "Note\ntwo lines", RED, 12);
+    const pdf = await PDFDocument.load(out);
+    expect(annotationSubtypes(pdf, 0)).toEqual(["FreeText"]);
+    const a = firstAnnot(pdf);
+    expect(a.has(PDFName.of("DA"))).toBe(true);
+    expect(a.has(PDFName.of("AP"))).toBe(true);
   });
 });

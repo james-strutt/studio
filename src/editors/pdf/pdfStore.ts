@@ -5,6 +5,16 @@ import { loadPdf, type PageSize } from "@/editors/pdf/pdfDocument";
 export type ZoomMode = "fit-width" | "fit-page" | "actual" | "custom";
 export type ViewMode = "single" | "two-up" | "spread";
 export type SidebarTab = "thumbnails" | "outline" | "search";
+export type AnnotTool =
+  | "select"
+  | "ink"
+  | "rect"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "polygon"
+  | "note"
+  | "text";
 
 export interface PdfDoc {
   id: string;
@@ -29,6 +39,14 @@ interface PdfStore {
   sidebar: SidebarTab | null;
   scrollTarget: { page: number; nonce: number } | null;
   selection: number[];
+  annotTool: AnnotTool;
+  annotColorId: string;
+  annotWidth: number;
+  annotFill: boolean;
+  setAnnotTool: (tool: AnnotTool) => void;
+  setAnnotColorId: (id: string) => void;
+  setAnnotWidth: (w: number) => void;
+  setAnnotFill: (fill: boolean) => void;
   openBytes: (name: string, bytes: Uint8Array) => Promise<string>;
   replaceBytes: (id: string, bytes: Uint8Array) => Promise<void>;
   markSaved: (id: string, name?: string) => void;
@@ -58,6 +76,14 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
   sidebar: "thumbnails",
   scrollTarget: null,
   selection: [],
+  annotTool: "select",
+  annotColorId: "amber",
+  annotWidth: 2,
+  annotFill: false,
+  setAnnotTool: (annotTool) => set({ annotTool }),
+  setAnnotColorId: (annotColorId) => set({ annotColorId }),
+  setAnnotWidth: (annotWidth) => set({ annotWidth }),
+  setAnnotFill: (annotFill) => set({ annotFill }),
 
   async openBytes(name, bytes) {
     const { doc, pageSizes } = await loadPdf(bytes);

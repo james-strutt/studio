@@ -2,6 +2,7 @@ import "@/editors/pdf/pdf.css";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 import { PdfTabs } from "@/editors/pdf/PdfTabs";
 import { PdfToolbar } from "@/editors/pdf/PdfToolbar";
+import { PdfAnnotToolbar } from "@/editors/pdf/PdfAnnotToolbar";
 import { PdfViewer } from "@/editors/pdf/PdfViewer";
 import { PdfSidebar } from "@/editors/pdf/PdfSidebar";
 import { dispatch } from "@/commands/history";
@@ -14,6 +15,7 @@ export function PdfEditor(): JSX.Element {
     <div className="editor-fill">
       <PdfTabs />
       <PdfToolbar />
+      {active && <PdfAnnotToolbar />}
       {active ? (
         <div className="pdf-body">
           {sidebar && <PdfSidebar doc={active} />}

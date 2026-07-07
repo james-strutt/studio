@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { usePdfStore, type PdfDoc } from "@/editors/pdf/pdfStore";
 import { PdfPage } from "@/editors/pdf/PdfPage";
 import { PdfMarkupLayer } from "@/editors/pdf/PdfMarkupLayer";
+import { PdfDrawOverlay } from "@/editors/pdf/PdfDrawOverlay";
 import {
   buildLayout,
   fitPageScale,
@@ -34,6 +35,8 @@ export function PdfViewer({ doc }: { doc: PdfDoc }): JSX.Element {
   const setEffectiveScale = usePdfStore((s) => s.setEffectiveScale);
   const setCurrentPage = usePdfStore((s) => s.setCurrentPage);
   const scrollTarget = usePdfStore((s) => s.scrollTarget);
+  const annotTool = usePdfStore((s) => s.annotTool);
+  const drawActive = doc.rotation === 0 && annotTool !== "select";
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -161,6 +164,13 @@ export function PdfViewer({ doc }: { doc: PdfDoc }): JSX.Element {
                     textLayer={doc.rotation === 0}
                     pageHeightPts={doc.pageSizes[p].height}
                   />
+                  {drawActive && (
+                    <PdfDrawOverlay
+                      pageIndex={p}
+                      scale={scale}
+                      pageHeightPts={doc.pageSizes[p].height}
+                    />
+                  )}
                 </div>
               ))}
             </div>

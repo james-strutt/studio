@@ -1,4 +1,12 @@
-import { PDFDocument, PDFName, PDFString, PDFDict, type PDFPage, type PDFRef } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFName,
+  PDFString,
+  PDFDict,
+  StandardFonts,
+  type PDFPage,
+  type PDFRef,
+} from "pdf-lib";
 
 type Bytes = Uint8Array;
 
@@ -179,6 +187,276 @@ export async function addTextMarkupPages(
   for (const g of groups) {
     if (g.rects.length) addMarkupToPage(pdf, g.pageIndex, g.rects, subtype, color, opts);
   }
+  return pdf.save();
+}
+
+/* ---------------------------------------------------------------------------
+ * Drawing annotations (P1.10): ink, shapes, sticky notes, text boxes.
+ * Each is a real PDF annotation with a baked appearance stream. Geometry is in
+ * PDF points; the draw overlay maps pointer coordinates before dispatching.
+ * ------------------------------------------------------------------------- */
+
+const ROUND_CAPS = "1 J 1 j\n";
+
+function strokeSetup(color: RGB, width: number): string {
+  return `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} RG\n${fmt(width)} w\n${ROUND_CAPS}`;
+}
+
+function escPdfText(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function ellipsePath(x0: number, y0: number, x1: number, y1: number): string {
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const rx = (x1 - x0) / 2;
+  const ry = (y1 - y0) / 2;
+  const kx = rx * 0.5523;
+  const ky = ry * 0.5523;
+  return [
+    `${fmt(cx + rx)} ${fmt(cy)} m`,
+    `${fmt(cx + rx)} ${fmt(cy + ky)} ${fmt(cx + kx)} ${fmt(cy + ry)} ${fmt(cx)} ${fmt(cy + ry)} c`,
+    `${fmt(cx - kx)} ${fmt(cy + ry)} ${fmt(cx - rx)} ${fmt(cy + ky)} ${fmt(cx - rx)} ${fmt(cy)} c`,
+    `${fmt(cx - rx)} ${fmt(cy - ky)} ${fmt(cx - kx)} ${fmt(cy - ry)} ${fmt(cx)} ${fmt(cy - ry)} c`,
+    `${fmt(cx + kx)} ${fmt(cy - ry)} ${fmt(cx + rx)} ${fmt(cy - ky)} ${fmt(cx + rx)} ${fmt(cy)} c`,
+  ].join("\n");
+}
+
+/** Freehand ink: one or more polylines, each a flat [x,y,x,y,…] array. */
+export async function addInk(
+  bytes: Bytes,
+  pageIndex: number,
+  paths: number[][],
+  color: RGB,
+  width: number,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const pts = paths.flat();
+  const xs = pts.filter((_, i) => i % 2 === 0);
+  const ys = pts.filter((_, i) => i % 2 === 1);
+  const pad = width + 2;
+  const bbox: Rect = [
+    Math.min(...xs) - pad,
+    Math.min(...ys) - pad,
+    Math.max(...xs) + pad,
+    Math.max(...ys) + pad,
+  ];
+  let content = strokeSetup(color, width);
+  for (const path of paths) {
+    for (let i = 0; i < path.length; i += 2) {
+      content += `${fmt(path[i])} ${fmt(path[i + 1])} ${i === 0 ? "m" : "l"} `;
+    }
+    content += "S\n";
+  }
+  const apRef = makeAppearance(pdf, bbox, content);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Ink",
+    Rect: bbox,
+    InkList: paths,
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+    BS: { W: width },
+  });
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+export type ShapeKind = "Square" | "Circle";
+
+/** Rectangle (/Square) or ellipse (/Circle) over a rect, optional fill. */
+export async function addShape(
+  bytes: Bytes,
+  pageIndex: number,
+  kind: ShapeKind,
+  rect: Rect,
+  color: RGB,
+  width: number,
+  fill: RGB | null = null,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const [x0, y0, x1, y1] = rect;
+  const hw = width / 2;
+  const op = fill ? "B" : "S";
+  let c = strokeSetup(color, width);
+  if (fill) c += `${fmt(fill.r)} ${fmt(fill.g)} ${fmt(fill.b)} rg\n`;
+  if (kind === "Square") {
+    c += `${fmt(x0 + hw)} ${fmt(y0 + hw)} ${fmt(x1 - x0 - width)} ${fmt(y1 - y0 - width)} re\n${op}\n`;
+  } else {
+    c += `${ellipsePath(x0 + hw, y0 + hw, x1 - hw, y1 - hw)}\n${op}\n`;
+  }
+  const apRef = makeAppearance(pdf, rect, c);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: kind,
+    Rect: rect,
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+    BS: { W: width },
+  });
+  if (fill) annot.set(PDFName.of("IC"), pdf.context.obj([fill.r, fill.g, fill.b]));
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/** Straight line, optionally with an arrowhead at the end point. */
+export async function addLine(
+  bytes: Bytes,
+  pageIndex: number,
+  p: [number, number, number, number],
+  color: RGB,
+  width: number,
+  arrow: boolean,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const [x1, y1, x2, y2] = p;
+  const head = Math.max(6, width * 3);
+  const pad = head + width + 2;
+  const bbox: Rect = [
+    Math.min(x1, x2) - pad,
+    Math.min(y1, y2) - pad,
+    Math.max(x1, x2) + pad,
+    Math.max(y1, y2) + pad,
+  ];
+  let c = strokeSetup(color, width);
+  c += `${fmt(x1)} ${fmt(y1)} m ${fmt(x2)} ${fmt(y2)} l S\n`;
+  if (arrow) {
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const a1 = ang + Math.PI * 0.83;
+    const a2 = ang - Math.PI * 0.83;
+    c += `${fmt(x2 + Math.cos(a1) * head)} ${fmt(y2 + Math.sin(a1) * head)} m ${fmt(x2)} ${fmt(y2)} l ${fmt(x2 + Math.cos(a2) * head)} ${fmt(y2 + Math.sin(a2) * head)} l S\n`;
+  }
+  const apRef = makeAppearance(pdf, bbox, c);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Line",
+    Rect: bbox,
+    L: [x1, y1, x2, y2],
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+    BS: { W: width },
+    LE: arrow ? ["None", "OpenArrow"] : ["None", "None"],
+  });
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/** Closed polygon through the given [x,y,x,y,…] vertices. */
+export async function addPolygon(
+  bytes: Bytes,
+  pageIndex: number,
+  vertices: number[],
+  color: RGB,
+  width: number,
+  fill: RGB | null = null,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const xs = vertices.filter((_, i) => i % 2 === 0);
+  const ys = vertices.filter((_, i) => i % 2 === 1);
+  const pad = width + 2;
+  const bbox: Rect = [
+    Math.min(...xs) - pad,
+    Math.min(...ys) - pad,
+    Math.max(...xs) + pad,
+    Math.max(...ys) + pad,
+  ];
+  let c = strokeSetup(color, width);
+  if (fill) c += `${fmt(fill.r)} ${fmt(fill.g)} ${fmt(fill.b)} rg\n`;
+  for (let i = 0; i < vertices.length; i += 2) {
+    c += `${fmt(vertices[i])} ${fmt(vertices[i + 1])} ${i === 0 ? "m" : "l"} `;
+  }
+  c += `h\n${fill ? "B" : "S"}\n`;
+  const apRef = makeAppearance(pdf, bbox, c);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Polygon",
+    Rect: bbox,
+    Vertices: vertices,
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+    BS: { W: width },
+  });
+  if (fill) annot.set(PDFName.of("IC"), pdf.context.obj([fill.r, fill.g, fill.b]));
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/** Sticky note (/Text) anchored with its top-left at (x, y), with a baked icon. */
+export async function addTextNote(
+  bytes: Bytes,
+  pageIndex: number,
+  x: number,
+  y: number,
+  contents: string,
+  color: RGB,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const size = 20;
+  const rect: Rect = [x, y - size, x + size, y];
+  // A simple filled rounded square so the note shows on the canvas.
+  let c = `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg\n`;
+  c += `${fmt(x + 1)} ${fmt(y - size + 1)} ${fmt(size - 2)} ${fmt(size - 2)} re\nf\n`;
+  c += `1 1 1 RG\n1 w\n${fmt(x + 5)} ${fmt(y - 6)} m ${fmt(x + size - 5)} ${fmt(y - 6)} l S\n`;
+  c += `${fmt(x + 5)} ${fmt(y - 10)} m ${fmt(x + size - 5)} ${fmt(y - 10)} l S\n`;
+  c += `${fmt(x + 5)} ${fmt(y - 14)} m ${fmt(x + size - 7)} ${fmt(y - 14)} l S\n`;
+  const apRef = makeAppearance(pdf, rect, c);
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "Text",
+    Rect: rect,
+    Name: "Comment",
+    Open: false,
+    C: [color.r, color.g, color.b],
+    F: F_PRINT,
+  });
+  finishAnnotation(pdf, annot, apRef, { contents });
+  appendAnnotation(pdf, page, annot);
+  return pdf.save();
+}
+
+/** Free-text box (/FreeText) with a baked Helvetica appearance. */
+export async function addFreeText(
+  bytes: Bytes,
+  pageIndex: number,
+  rect: Rect,
+  contents: string,
+  color: RGB,
+  fontSize: number,
+): Promise<Bytes> {
+  const pdf = await PDFDocument.load(bytes);
+  const page = pdf.getPage(pageIndex);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const [x0, , , y1] = rect;
+  const lines = contents.split("\n");
+  let c = `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg\n`;
+  c += `BT\n/Helv ${fmt(fontSize)} Tf\n${fmt(fontSize * 1.2)} TL\n`;
+  c += `${fmt(x0 + 2)} ${fmt(y1 - fontSize)} Td\n`;
+  lines.forEach((ln, i) => {
+    c += `(${escPdfText(ln)}) Tj\n`;
+    if (i < lines.length - 1) c += "T*\n";
+  });
+  c += "ET\n";
+  const apRef = makeAppearance(pdf, rect, c, { Font: { Helv: font.ref } });
+  const da = `/Helv ${fmt(fontSize)} Tf ${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg`;
+  const annot = pdf.context.obj({
+    Type: "Annot",
+    Subtype: "FreeText",
+    Rect: rect,
+    F: F_PRINT,
+  });
+  annot.set(PDFName.of("Contents"), PDFString.of(contents));
+  annot.set(PDFName.of("DA"), PDFString.of(da));
+  finishAnnotation(pdf, annot, apRef);
+  appendAnnotation(pdf, page, annot);
   return pdf.save();
 }
 

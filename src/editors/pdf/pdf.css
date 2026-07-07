@@ -339,6 +339,7 @@
 }
 
 .pdf-page-slot {
+  position: relative;
   background: #fff;
   box-shadow: var(--shadow-2);
 }
@@ -416,6 +417,66 @@
 .pdf-swatch.is-active {
   border-color: var(--ink);
   box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* ---- annotation drawing toolbar + overlay ---- */
+.pdf-annot-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.pdf-annot-swatches {
+  display: flex;
+  gap: 3px;
+}
+
+.pdf-draw-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.pdf-draw-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.pdf-annot-popup {
+  position: absolute;
+  z-index: 3;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-2);
+}
+
+.pdf-annot-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pdf-poly-finish {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 3;
 }
 
 /* Dark-mode page rendering: invert luminance and rotate hue so colours stay
