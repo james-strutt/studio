@@ -2,7 +2,19 @@ import { z } from "zod";
 import { registerCommand } from "@/commands/registry";
 import { getFileService } from "@/files/fileService";
 import { useImageStore } from "@/editors/image/useImageStore";
-import { rasterLayer, textLayer, shapeLayer, reorder, type Layer } from "@/editors/image/imageModel";
+import {
+  rasterLayer,
+  textLayer,
+  shapeLayer,
+  reorder,
+  cropDoc,
+  resizeCanvas,
+  resizeImage,
+  flipCanvas,
+  rotateCanvas,
+  type Layer,
+  type ImageDoc,
+} from "@/editors/image/imageModel";
 
 interface Snapshot {
   prev: Layer[];
@@ -24,6 +36,34 @@ function undoMutate(_a: unknown, snap: Snapshot | null): void {
   if (snap) useImageStore.getState().setLayers(snap.prev, snap.prevSel);
 }
 
+interface DocSnapshot {
+  prev: ImageDoc;
+}
+
+function mutateDoc(fn: (doc: ImageDoc) => ImageDoc): DocSnapshot | null {
+  const doc = useImageStore.getState().getDoc();
+  if (!doc) return null;
+  useImageStore.getState().replaceDoc(fn(doc));
+  return { prev: doc };
+}
+
+function undoDoc(_a: unknown, snap: DocSnapshot | null): void {
+  if (snap) useImageStore.getState().replaceDoc(snap.prev);
+}
+
+/** Shared raster import: decode bytes, size a document if none, add a layer. */
+async function addRaster(bytes: Uint8Array, name: string): Promise<Snapshot | null> {
+  const blob = new Blob([Uint8Array.from(bytes)]);
+  const url = URL.createObjectURL(blob);
+  const bmp = await createImageBitmap(blob);
+  const store = useImageStore.getState();
+  if (!store.getDoc()) store.createDoc(name, bmp.width, bmp.height);
+  return mutate((layers) => {
+    const l = rasterLayer(url, bmp.width, bmp.height, name);
+    return { layers: [...layers, l], selectedId: l.id };
+  });
+}
+
 registerCommand({
   id: "image.addImage",
   title: "Add image layer",
@@ -34,16 +74,18 @@ registerCommand({
       accept: [".png", ".jpg", ".jpeg", ".webp", ".avif"],
     });
     if (!file) return null;
-    const blob = new Blob([Uint8Array.from(file.data)]);
-    const url = URL.createObjectURL(blob);
-    const bmp = await createImageBitmap(blob);
-    const store = useImageStore.getState();
-    if (!store.getDoc()) store.createDoc(file.name, bmp.width, bmp.height);
-    return mutate((layers) => {
-      const l = rasterLayer(url, bmp.width, bmp.height, file.name);
-      return { layers: [...layers, l], selectedId: l.id };
-    });
+    return addRaster(file.data, file.name);
   },
+  undo: undoMutate,
+});
+
+// Import from drag-drop / clipboard paste (bytes already in hand).
+registerCommand({
+  id: "image.addImageFile",
+  title: "Import image",
+  editor: "image",
+  schema: z.object({ bytes: z.instanceof(Uint8Array), name: z.string().default("Pasted image") }),
+  run: ({ bytes, name }) => addRaster(bytes, name),
   undo: undoMutate,
 });
 
@@ -106,6 +148,55 @@ registerCommand({
       layers: layers.map((l) => (l.id === id ? ({ ...l, ...patch } as Layer) : l)),
     })),
   undo: undoMutate,
+});
+
+registerCommand({
+  id: "image.crop",
+  title: "Crop canvas",
+  editor: "image",
+  schema: z.object({ x: z.number(), y: z.number(), width: z.number().positive(), height: z.number().positive() }),
+  run: ({ x, y, width, height }) => mutateDoc((doc) => cropDoc(doc, x, y, width, height)),
+  undo: undoDoc,
+});
+
+registerCommand({
+  id: "image.resizeCanvas",
+  title: "Resize canvas",
+  editor: "image",
+  schema: z.object({
+    width: z.number().positive(),
+    height: z.number().positive(),
+    anchor: z.enum(["top-left", "center"]).default("center"),
+  }),
+  run: ({ width, height, anchor }) => mutateDoc((doc) => resizeCanvas(doc, width, height, anchor)),
+  undo: undoDoc,
+});
+
+registerCommand({
+  id: "image.resizeImage",
+  title: "Resize image",
+  editor: "image",
+  schema: z.object({ factor: z.number().positive() }),
+  run: ({ factor }) => mutateDoc((doc) => resizeImage(doc, factor)),
+  undo: undoDoc,
+});
+
+registerCommand({
+  id: "image.flip",
+  title: "Flip canvas",
+  editor: "image",
+  schema: z.object({ axis: z.enum(["h", "v"]) }),
+  run: ({ axis }) => mutateDoc((doc) => flipCanvas(doc, axis)),
+  undo: undoDoc,
+});
+
+registerCommand({
+  id: "image.rotateCanvas",
+  title: "Rotate canvas 90°",
+  editor: "image",
+  schema: z.object({ dir: z.enum(["cw", "ccw"]).default("cw") }),
+  run: ({ dir }) => mutateDoc((doc) => rotateCanvas(doc, dir)),
+  undo: undoDoc,
 });
 
 function ensureDoc(): void {

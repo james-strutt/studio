@@ -5,6 +5,7 @@ interface ImageStore {
   doc: ImageDoc | null;
   createDoc: (name: string, width: number, height: number) => void;
   setLayers: (layers: Layer[], selectedId?: string | null) => void;
+  replaceDoc: (doc: ImageDoc) => void;
   select: (id: string | null) => void;
   getDoc: () => ImageDoc | null;
 }
@@ -34,6 +35,8 @@ export const useImageStore = create<ImageStore>((set, get) => ({
         },
       };
     }),
+
+  replaceDoc: (doc) => set({ doc }),
 
   select: (id) => set((s) => (s.doc ? { doc: { ...s.doc, selectedId: id } } : s)),
 

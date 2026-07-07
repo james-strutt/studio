@@ -109,3 +109,9 @@
   padding: 2px 4px;
   max-width: 110px;
 }
+
+.img-ratios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}

@@ -130,3 +130,75 @@ export function reorder<T>(list: T[], from: number, to: number): T[] {
   next.splice(Math.max(0, Math.min(to, next.length)), 0, moved);
   return next;
 }
+
+/* ---- document transforms (P2.2), all pure ---- */
+
+/** Crop the canvas to (x,y,w,h); layers shift by (-x,-y) so content stays put. */
+export function cropDoc(doc: ImageDoc, x: number, y: number, w: number, h: number): ImageDoc {
+  return {
+    ...doc,
+    width: Math.round(w),
+    height: Math.round(h),
+    layers: doc.layers.map((l) => ({ ...l, x: l.x - x, y: l.y - y })),
+  };
+}
+
+/** Change canvas dimensions without scaling content; anchor centres or keeps top-left. */
+export function resizeCanvas(
+  doc: ImageDoc,
+  width: number,
+  height: number,
+  anchor: "top-left" | "center" = "top-left",
+): ImageDoc {
+  const dx = anchor === "center" ? (width - doc.width) / 2 : 0;
+  const dy = anchor === "center" ? (height - doc.height) / 2 : 0;
+  return {
+    ...doc,
+    width: Math.round(width),
+    height: Math.round(height),
+    layers: doc.layers.map((l) => ({ ...l, x: l.x + dx, y: l.y + dy })),
+  };
+}
+
+/** Scale the whole image (content + canvas) by a factor. */
+export function resizeImage(doc: ImageDoc, factor: number): ImageDoc {
+  return {
+    ...doc,
+    width: Math.round(doc.width * factor),
+    height: Math.round(doc.height * factor),
+    layers: doc.layers.map((l) => ({
+      ...l,
+      x: l.x * factor,
+      y: l.y * factor,
+      scaleX: l.scaleX * factor,
+      scaleY: l.scaleY * factor,
+    })),
+  };
+}
+
+/** Mirror the canvas; each layer mirrors around its origin (negated scale) + reposition. */
+export function flipCanvas(doc: ImageDoc, axis: "h" | "v"): ImageDoc {
+  return {
+    ...doc,
+    layers: doc.layers.map((l) =>
+      axis === "h"
+        ? { ...l, x: doc.width - l.x, scaleX: -l.scaleX }
+        : { ...l, y: doc.height - l.y, scaleY: -l.scaleY },
+    ),
+  };
+}
+
+/** Rotate the canvas 90° (dims swap); each layer's origin maps and rotation shifts ±90°. */
+export function rotateCanvas(doc: ImageDoc, dir: "cw" | "ccw"): ImageDoc {
+  const { width: W, height: H } = doc;
+  return {
+    ...doc,
+    width: H,
+    height: W,
+    layers: doc.layers.map((l) =>
+      dir === "cw"
+        ? { ...l, x: H - l.y, y: l.x, rotation: l.rotation + 90 }
+        : { ...l, x: l.y, y: W - l.x, rotation: l.rotation - 90 },
+    ),
+  };
+}
