@@ -10,8 +10,12 @@ import {
   projectDuration,
   clipAt,
   clipDuration,
+  sourceTimeAt,
+  trackEnd,
+  formatTimecode,
   type VideoProject,
 } from "@/editors/video/videoModel";
+import { containRect } from "@/editors/video/engine/renderMath";
 
 function projectWithClip(): { project: VideoProject; clipId: string } {
   let p = emptyProject();
@@ -64,5 +68,36 @@ describe("video project model", () => {
   it("removes a clip", () => {
     const { project, clipId } = projectWithClip();
     expect(removeClip(project, clipId).clips).toHaveLength(0);
+  });
+
+  it("maps timeline time to source time", () => {
+    const { project } = projectWithClip();
+    const clip = project.clips[0]; // start 2, inPoint 0
+    expect(sourceTimeAt(clip, 2)).toBe(0);
+    expect(sourceTimeAt(clip, 5)).toBe(3);
+    expect(sourceTimeAt({ ...clip, inPoint: 1.5 }, 5)).toBe(4.5);
+  });
+
+  it("finds the end of a track for appending", () => {
+    const { project } = projectWithClip(); // clip on v1 ends at 8
+    expect(trackEnd(project, "v1")).toBe(8);
+    expect(trackEnd(project, "a1")).toBe(0);
+  });
+});
+
+describe("timecode", () => {
+  it("formats frames and rolls over to hours", () => {
+    expect(formatTimecode(0, 30)).toBe("00:00:00");
+    expect(formatTimecode(1.5, 30)).toBe("00:01:15");
+    expect(formatTimecode(61, 30)).toBe("01:01:00");
+    expect(formatTimecode(3661, 30)).toBe("01:01:01:00");
+  });
+});
+
+describe("containRect", () => {
+  it("letterboxes wide-into-tall and pads tall-into-wide", () => {
+    expect(containRect(3840, 2160, 1920, 1080)).toEqual({ x: 0, y: 0, w: 1920, h: 1080 });
+    expect(containRect(1080, 1920, 1920, 1080)).toEqual({ x: (1920 - 607.5) / 2, y: 0, w: 607.5, h: 1080 });
+    expect(containRect(0, 0, 1920, 1080)).toEqual({ x: 0, y: 0, w: 0, h: 0 });
   });
 });

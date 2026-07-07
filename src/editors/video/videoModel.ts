@@ -49,6 +49,19 @@ export function projectDuration(project: VideoProject): number {
 
 let counter = 0;
 const id = (p: string): string => `${p}-${(counter += 1)}`;
+export const newId = id;
+
+/** Non-drop-frame timecode MM:SS:FF (HH: prepended past an hour). */
+export function formatTimecode(t: number, fps: number): string {
+  const fpsInt = Math.max(1, Math.round(fps));
+  const totalFrames = Math.max(0, Math.round(t * fpsInt));
+  const frames = totalFrames % fpsInt;
+  const totalSeconds = Math.floor(totalFrames / fpsInt);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const core = `${pad(Math.floor(totalSeconds / 60) % 60)}:${pad(totalSeconds % 60)}:${pad(frames)}`;
+  const hours = Math.floor(totalSeconds / 3600);
+  return hours > 0 ? `${pad(hours)}:${core}` : core;
+}
 
 export function emptyProject(name = "Untitled", width = 1920, height = 1080, fps = 30): VideoProject {
   return {
@@ -126,4 +139,25 @@ export function clipAt(project: VideoProject, trackId: string, time: number): Cl
     if (c.trackId === trackId && time >= c.start && time < clipEnd(c)) found = c;
   }
   return found;
+}
+
+/** Map an absolute timeline time to a time within the clip's source media. */
+export function sourceTimeAt(clip: Clip, time: number): number {
+  return clip.inPoint + (time - clip.start);
+}
+
+/** End of the last clip on a track (0 for an empty track). */
+export function trackEnd(project: VideoProject, trackId: string): number {
+  return project.clips
+    .filter((c) => c.trackId === trackId)
+    .reduce((max, c) => Math.max(max, clipEnd(c)), 0);
+}
+
+export function addSource(project: VideoProject, source: MediaSource): VideoProject {
+  return { ...project, sources: [...project.sources, source] };
+}
+
+/** Tracks of the given kinds in render order (array order = bottom first). */
+export function tracksOfKind(project: VideoProject, ...kinds: TrackKind[]): Track[] {
+  return project.tracks.filter((t) => kinds.includes(t.kind));
 }

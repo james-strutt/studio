@@ -11,6 +11,7 @@ import "@/editors/pdf/pdfAnnotationCommands";
 import "@/editors/pdf/pdfFormCommands";
 import "@/editors/pdf/pdfContentCommands";
 import "@/editors/image/imageCommands";
+import "@/editors/video/videoCommands";
 import { App } from "@/App";
 import { usePdfStore } from "@/editors/pdf/pdfStore";
 
