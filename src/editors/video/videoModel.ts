@@ -59,6 +59,7 @@ export interface Clip {
   inPoint: number; // source in, seconds
   outPoint: number; // source out, seconds
   volume: number; // 0..1
+  speed?: number; // playback rate 0.25..4 (default 1)
   fadeIn?: number; // audio fade seconds from clip start
   fadeOut?: number; // audio fade seconds before clip end
   transform?: ClipTransform;
@@ -91,13 +92,17 @@ export interface VideoProject {
   width: number;
   height: number;
   fps: number;
+  fill?: "black" | "blur"; // letterbox fill for the base video layer
   tracks: Track[];
   clips: Clip[];
   sources: MediaSource[];
   markers: Marker[];
 }
 
-export const clipDuration = (c: Clip): number => Math.max(0, c.outPoint - c.inPoint);
+export const clipSpeed = (c: Clip): number => c.speed ?? 1;
+/** Timeline duration: source window divided by playback speed. */
+export const clipDuration = (c: Clip): number =>
+  Math.max(0, (c.outPoint - c.inPoint) / clipSpeed(c));
 export const clipEnd = (c: Clip): number => c.start + clipDuration(c);
 
 /** Total timeline length = the furthest clip end. */
@@ -188,6 +193,34 @@ export function addTrack(project: VideoProject, kind: TrackKind): VideoProject {
   return { ...project, tracks: [...project.tracks, track] };
 }
 
+export const MIN_SPEED = 0.25;
+export const MAX_SPEED = 4;
+
+/** Change playback rate keeping the timeline start (timeline length rescales). */
+export function setClipSpeed(project: VideoProject, clipId: string, speed: number): VideoProject {
+  const s = Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed));
+  return {
+    ...project,
+    clips: project.clips.map((c) => {
+      if (c.id !== clipId) return c;
+      const next = { ...c };
+      if (s === 1) delete next.speed;
+      else next.speed = s;
+      return next;
+    }),
+  };
+}
+
+export interface ProjectFormat {
+  width: number;
+  height: number;
+  fill: "black" | "blur";
+}
+
+export function setProjectFormat(project: VideoProject, format: ProjectFormat): VideoProject {
+  return { ...project, width: format.width, height: format.height, fill: format.fill };
+}
+
 /** Clamped audio fades; a fade of 0 clears the field. */
 export function setClipFade(
   project: VideoProject,
@@ -255,9 +288,9 @@ export function trimClip(project: VideoProject, clipId: string, inPoint: number,
 export function splitClip(project: VideoProject, clipId: string, atTime: number): VideoProject {
   const clip = project.clips.find((c) => c.id === clipId);
   if (!clip) return project;
-  const offset = atTime - clip.start; // seconds into the clip
+  const offset = atTime - clip.start; // timeline seconds into the clip
   if (offset <= 0 || offset >= clipDuration(clip)) return project;
-  const cutSource = clip.inPoint + offset;
+  const cutSource = clip.inPoint + offset * clipSpeed(clip);
   const left: Clip = { ...clip, outPoint: cutSource };
   const right: Clip = { ...clip, id: id("clip"), start: atTime, inPoint: cutSource };
   return { ...project, clips: project.clips.flatMap((c) => (c.id === clipId ? [left, right] : [c])) };
@@ -282,9 +315,10 @@ export function trimClipLeft(project: VideoProject, clipId: string, newStart: nu
     clips: project.clips.map((c) => {
       if (c.id !== clipId) return c;
       const end = clipEnd(c);
-      const minStart = Math.max(0, c.start - c.inPoint); // can't reveal media before source 0
+      const speed = clipSpeed(c);
+      const minStart = Math.max(0, c.start - c.inPoint / speed); // can't reveal media before source 0
       const ns = Math.min(Math.max(newStart, minStart), end - MIN_CLIP_SECONDS);
-      return { ...c, start: ns, inPoint: c.inPoint + (ns - c.start) };
+      return { ...c, start: ns, inPoint: c.inPoint + (ns - c.start) * speed };
     }),
   };
 }
@@ -297,7 +331,11 @@ export function trimClipRight(project: VideoProject, clipId: string, newEnd: num
       if (c.id !== clipId) return c;
       const srcDur = sourceDurationOf(project, c);
       const maxOut = srcDur ?? Number.POSITIVE_INFINITY;
-      const no = Math.min(Math.max(newEnd - c.start + c.inPoint, c.inPoint + MIN_CLIP_SECONDS), maxOut);
+      const speed = clipSpeed(c);
+      const no = Math.min(
+        Math.max((newEnd - c.start) * speed + c.inPoint, c.inPoint + MIN_CLIP_SECONDS),
+        maxOut,
+      );
       return { ...c, outPoint: no };
     }),
   };
@@ -330,14 +368,16 @@ export function rollEdit(
   const right = project.clips.find((c) => c.id === rightId);
   if (!left || !right) return project;
   const leftSrc = sourceDurationOf(project, left);
-  let t = Math.max(time, left.start + MIN_CLIP_SECONDS, right.start - right.inPoint);
+  const sl = clipSpeed(left);
+  const sr = clipSpeed(right);
+  let t = Math.max(time, left.start + MIN_CLIP_SECONDS, right.start - right.inPoint / sr);
   t = Math.min(t, clipEnd(right) - MIN_CLIP_SECONDS);
-  if (leftSrc !== null) t = Math.min(t, left.start - left.inPoint + leftSrc);
+  if (leftSrc !== null) t = Math.min(t, left.start + (leftSrc - left.inPoint) / sl);
   return {
     ...project,
     clips: project.clips.map((c) => {
-      if (c.id === leftId) return { ...c, outPoint: c.inPoint + (t - c.start) };
-      if (c.id === rightId) return { ...c, inPoint: c.inPoint + (t - c.start), start: t };
+      if (c.id === leftId) return { ...c, outPoint: c.inPoint + (t - c.start) * sl };
+      if (c.id === rightId) return { ...c, inPoint: c.inPoint + (t - c.start) * sr, start: t };
       return c;
     }),
   };
@@ -388,7 +428,7 @@ export function clipAt(project: VideoProject, trackId: string, time: number): Cl
 
 /** Map an absolute timeline time to a time within the clip's source media. */
 export function sourceTimeAt(clip: Clip, time: number): number {
-  return clip.inPoint + (time - clip.start);
+  return clip.inPoint + (time - clip.start) * clipSpeed(clip);
 }
 
 /** End of the last clip on a track (0 for an empty track). */

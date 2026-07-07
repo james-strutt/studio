@@ -27,7 +27,9 @@ import {
   rippleDelete,
   rollEdit,
   setClipFade,
+  setClipSpeed,
   setClipText,
+  setProjectFormat,
   setTrackMuted,
   setTrackSolo,
   slipClip,
@@ -487,6 +489,42 @@ registerCommand({
   editor: "video",
   schema: z.object({ clipId: z.string(), edge: z.enum(["in", "out"]), seconds: z.number().min(0) }),
   run: ({ clipId, edge, seconds }) => mutateProject((p) => setClipFade(p, clipId, edge, seconds)),
+  undo: undoProject,
+});
+
+registerCommand({
+  id: "video.setClipSpeed",
+  title: "Set clip speed (0.25x - 4x)",
+  editor: "video",
+  schema: z.object({ clipId: z.string(), speed: z.number().min(0.25).max(4) }),
+  run: ({ clipId, speed }) => {
+    const snap = mutateProject((p) => setClipSpeed(p, clipId, speed));
+    void playbackEngine.renderStill();
+    return snap;
+  },
+  undo: undoProject,
+});
+
+const FORMATS: Record<string, { width: number; height: number }> = {
+  "16:9": { width: 1920, height: 1080 },
+  "9:16": { width: 1080, height: 1920 },
+  "1:1": { width: 1080, height: 1080 },
+  "4:5": { width: 1080, height: 1350 },
+};
+
+registerCommand({
+  id: "video.setFormat",
+  title: "Set aspect ratio & letterbox fill",
+  editor: "video",
+  schema: z.object({
+    aspect: z.enum(["16:9", "9:16", "1:1", "4:5"]),
+    fill: z.enum(["black", "blur"]).default("black"),
+  }),
+  run: ({ aspect, fill }) => {
+    const snap = mutateProject((p) => setProjectFormat(p, { ...FORMATS[aspect], fill }));
+    void playbackEngine.renderStill();
+    return snap;
+  },
   undo: undoProject,
 });
 

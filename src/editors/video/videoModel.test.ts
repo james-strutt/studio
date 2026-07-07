@@ -29,6 +29,8 @@ import {
   setTrackMuted,
   trackAudible,
   addTrack,
+  setClipSpeed,
+  setProjectFormat,
   type VideoProject,
 } from "@/editors/video/videoModel";
 import { containRect } from "@/editors/video/engine/renderMath";
@@ -214,6 +216,38 @@ describe("audio basics", () => {
     const { project } = projectWithClip();
     const out = addTrack(addTrack(project, "audio"), "video");
     expect(out.tracks.map((t) => t.name)).toEqual(["Video 1", "Audio 1", "Audio 2", "Video 2"]);
+  });
+});
+
+describe("clip speed", () => {
+  it("rescales timeline duration and source mapping", () => {
+    const { project, clipId } = projectWithClip(); // start 2, in 0, out 6
+    const sped = setClipSpeed(project, clipId, 2).clips[0]; // 2x → 3s on timeline
+    expect(clipDuration(sped)).toBe(3);
+    expect(sourceTimeAt(sped, 3.5)).toBe(3); // 1.5s in at 2x
+    expect(projectDuration({ ...project, clips: [sped] })).toBe(5);
+  });
+
+  it("clamps to 0.25..4 and clears speed 1", () => {
+    const { project, clipId } = projectWithClip();
+    expect(setClipSpeed(project, clipId, 99).clips[0].speed).toBe(4);
+    expect(setClipSpeed(project, clipId, 0.01).clips[0].speed).toBe(0.25);
+    const back = setClipSpeed(setClipSpeed(project, clipId, 2), clipId, 1);
+    expect(back.clips[0].speed).toBeUndefined();
+  });
+
+  it("splits at the right source point under speed", () => {
+    const { project, clipId } = projectWithClip();
+    const sped = setClipSpeed(project, clipId, 2); // timeline 2..5
+    const out = splitClip(sped, clipId, 3); // 1s in → source 2
+    expect(out.clips[0].outPoint).toBe(2);
+    expect(out.clips[1]).toMatchObject({ start: 3, inPoint: 2 });
+  });
+
+  it("sets project format", () => {
+    const { project } = projectWithClip();
+    const out = setProjectFormat(project, { width: 1080, height: 1920, fill: "blur" });
+    expect(out).toMatchObject({ width: 1080, height: 1920, fill: "blur" });
   });
 });
 

@@ -4,6 +4,7 @@ import {
   clipAt,
   clipEnd,
   clipProgress,
+  clipSpeed,
   previousAbutting,
   projectDuration,
   sourceTimeAt,
@@ -61,6 +62,7 @@ class ClipVideoPlayer {
 
 interface ClipAudioTiming {
   volume: number;
+  speed: number; // buffers play at this rate, scheduled at compressed times
   fadeIn: number;
   fadeOut: number;
   clipStartCtx: number; // AudioContext time when the clip starts on the timeline
@@ -107,25 +109,27 @@ class ClipAudioPlayer {
       if (fadeStart > now) g.setValueAtTime(timing.volume, fadeStart);
       g.linearRampToValueAtTime(0, timing.clipEndCtx);
     }
-    void this.run(sink, anchor, sourceEnd);
+    void this.run(sink, anchor, sourceEnd, timing.speed);
   }
 
   private async run(
     sink: AudioBufferSink,
     anchor: { ctxTime: number; sourceTime: number },
     sourceEnd: number,
+    speed: number,
   ): Promise<void> {
     try {
       for await (const { buffer, timestamp } of sink.buffers(anchor.sourceTime, sourceEnd)) {
         if (this.stopped) return;
-        const when = anchor.ctxTime + (timestamp - anchor.sourceTime);
+        const when = anchor.ctxTime + (timestamp - anchor.sourceTime) / speed;
         const node = this.ctx.createBufferSource();
         node.buffer = buffer;
+        node.playbackRate.value = speed;
         node.connect(this.gain);
         if (when >= this.ctx.currentTime) {
           node.start(when);
-        } else if (when + buffer.duration > this.ctx.currentTime) {
-          node.start(this.ctx.currentTime, this.ctx.currentTime - when);
+        } else if (when + buffer.duration / speed > this.ctx.currentTime) {
+          node.start(this.ctx.currentTime, (this.ctx.currentTime - when) * speed);
         } else {
           continue; // buffer entirely in the past
         }
@@ -350,6 +354,7 @@ class PlaybackEngine {
             clip.outPoint,
             {
               volume: clip.volume,
+              speed: clipSpeed(clip),
               fadeIn: clip.fadeIn ?? 0,
               fadeOut: clip.fadeOut ?? 0,
               clipStartCtx: this.audioCtx.currentTime + (clip.start - t),
@@ -392,6 +397,21 @@ class PlaybackEngine {
     }
   }
 
+  /** Cover-scaled, blurred copy of the frame behind letterboxed base footage. */
+  private paintBlurFill(
+    ctx: CanvasRenderingContext2D,
+    project: VideoProject,
+    frame: FrameSource,
+  ): void {
+    const scale = Math.max(project.width / frame.width, project.height / frame.height);
+    const w = frame.width * scale;
+    const h = frame.height * scale;
+    ctx.save();
+    ctx.filter = "blur(40px)";
+    ctx.drawImage(frame, (project.width - w) / 2, (project.height - h) / 2, w, h);
+    ctx.restore();
+  }
+
   /** Composite all visual tracks at time t (bottom track first), honouring transitions. */
   private paintTracks(
     ctx: CanvasRenderingContext2D,
@@ -401,9 +421,18 @@ class PlaybackEngine {
   ): void {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, project.width, project.height);
+    const baseTrackId = tracksOfKind(project, "video")[0]?.id;
     for (const track of tracksOfKind(project, "video", "overlay", "caption")) {
       const incoming = clipAt(project, track.id, t);
       if (!incoming) continue;
+      if (project.fill === "blur" && track.id === baseTrackId) {
+        const frame = frameFor(incoming);
+        if (frame) {
+          const fits =
+            Math.abs(frame.width / frame.height - project.width / project.height) < 0.01;
+          if (!fits) this.paintBlurFill(ctx, project, frame);
+        }
+      }
       const p = transitionProgress(incoming, t);
       if (p === null) {
         this.paintOne(ctx, project, incoming, t, frameFor);

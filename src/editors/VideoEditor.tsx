@@ -37,6 +37,17 @@ function ProxyChip(): JSX.Element | null {
 
 const TRANSITION_TYPES = ["cut", "dissolve", "wipe", "slide"] as const;
 const TRANSITION_DURATIONS = [0.25, 0.5, 1, 2];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const ASPECTS = ["16:9", "9:16", "1:1", "4:5"] as const;
+
+function aspectOf(width: number, height: number): (typeof ASPECTS)[number] | "" {
+  const r = width / height;
+  if (Math.abs(r - 16 / 9) < 0.01) return "16:9";
+  if (Math.abs(r - 9 / 16) < 0.01) return "9:16";
+  if (Math.abs(r - 1) < 0.01) return "1:1";
+  if (Math.abs(r - 4 / 5) < 0.01) return "4:5";
+  return "";
+}
 
 function SelectedClipActions(): JSX.Element | null {
   const project = useVideoStore((s) => s.project);
@@ -81,6 +92,22 @@ function SelectedClipActions(): JSX.Element | null {
             }
           />
         </label>
+      )}
+      {(source?.kind === "video" || source?.kind === "audio") && (
+        <select
+          className="input vid-transition-select"
+          aria-label="Clip speed"
+          value={clip.speed ?? 1}
+          onChange={(e) =>
+            void dispatch("video.setClipSpeed", { clipId: clip.id, speed: Number(e.target.value) })
+          }
+        >
+          {SPEEDS.map((s) => (
+            <option key={s} value={s}>
+              {s}×
+            </option>
+          ))}
+        </select>
       )}
       {visual && (
         <>
@@ -209,6 +236,42 @@ export function VideoEditor(): JSX.Element {
           </div>
         )}
         {mode === "timeline" && <SelectedClipActions />}
+        {project && (
+          <>
+            <select
+              className="input vid-transition-select"
+              aria-label="Aspect ratio"
+              value={aspectOf(project.width, project.height)}
+              onChange={(e) =>
+                void dispatch("video.setFormat", {
+                  aspect: e.target.value,
+                  fill: project.fill ?? "black",
+                })
+              }
+            >
+              {aspectOf(project.width, project.height) === "" && <option value="">Custom</option>}
+              {ASPECTS.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input vid-transition-select"
+              aria-label="Letterbox fill"
+              value={project.fill ?? "black"}
+              onChange={(e) =>
+                void dispatch("video.setFormat", {
+                  aspect: aspectOf(project.width, project.height) || "16:9",
+                  fill: e.target.value,
+                })
+              }
+            >
+              <option value="black">Black bars</option>
+              <option value="blur">Blur fill</option>
+            </select>
+          </>
+        )}
         <ProxyChip />
         {project && (
           <span className="vid-project-meta">
