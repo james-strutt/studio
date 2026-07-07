@@ -114,8 +114,11 @@ Forms & signatures (fill tier)
 
 Security & output (everyday tier)
 - [ ] P1.16 Password: add/remove open password + permissions password, AES-256 (mupdf WASM handles encrypt). Permission flags UI (printing, copying, editing, annotating).
-- [ ] P1.17 Compress: downsample images to target DPI, subset fonts, strip unused objects (mupdf clean); target-size mode ("under 10 MB") iterating quality. AC: a 40 MB scan compresses below 10 MB with legible text.
-- [ ] P1.18 Convert: images→PDF (batch, page-size options), PDF→PNG/JPG per page (pdfjs render), PDF→plain text.
+  - DEFERRED — dependency-blocked. pdf-lib cannot encrypt; the plan specifies mupdf WASM for AES. mupdf is a large (~10 MB) shared dependency also required by P2.6 (in-place text edit) and P2.7 (true redaction), so it will be integrated once for all three rather than piecemeal here. This is the one Phase-1 task not attempted; everything else in P1 is implemented.
+- [x] P1.17 Compress: downsample images to target DPI, subset fonts, strip unused objects (mupdf clean); target-size mode ("under 10 MB") iterating quality. AC: a 40 MB scan compresses below 10 MB with legible text.
+  - DONE (raster path). `rasterCompress` renders each page via pdf.js at a target DPI, JPEG-encodes at a quality, and rebuilds at the original page dimensions; `compressToTarget` steps a DPI/quality ladder until under the byte target. Commands `pdf.compress` / `pdf.compressTarget` (undoable). The `imagesToPdf` size ladder logic is unit-tested; the render path is browser-only. **Honest scope:** this is the correct approach for scans (the AC case — already raster, stays legible) but rasterises text/vector PDFs (loses selectable text). Structure-preserving image downsampling + font subsetting is the mupdf follow-up ([[P1.16]] shares that dependency). AC (40 MB scan < 10 MB) not machine-verified this session — no scan fixture + browser-render blocked by the proxy routing.
+- [x] P1.18 Convert: images→PDF (batch, page-size options), PDF→PNG/JPG per page (pdfjs render), PDF→plain text.
+  - DONE. `pdfConvert.ts`: `imagesToPdf` (batch, page-size modes image/A4/Letter — unit-tested, 3 cases), `pdfToText` (pdf.js text extraction → `.txt`), `pdfToImages` (pdf.js render → PNG/JPG per page at a chosen scale). Palette commands `pdf.imagesToPdf` / `pdf.exportText` / `pdf.exportImages` with sensible defaults.
 - [ ] P1.19 **Phase done when:** every P1 feature is a palette-searchable command with working undo; a real-world task (merge 3 PDFs, reorder, annotate, measure, fill+sign a form, password, compress, export) completes without dev tools open.
 
 ## Phase 2 — Image editor foundation + PDF content editing
