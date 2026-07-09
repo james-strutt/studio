@@ -10,5 +10,7 @@ export default defineConfig({
   // mupdf (and other WASM libs) ship top-level await; es2022 output supports it.
   build: { target: "es2022" },
   esbuild: { target: "es2022" },
-  optimizeDeps: { esbuildOptions: { target: "es2022" } },
+  // Excluding mupdf keeps its relative .wasm URL valid in dev — pre-bundling it
+  // into .vite/deps made the wasm fetch fall back to index.html (magic-word error).
+  optimizeDeps: { esbuildOptions: { target: "es2022" }, exclude: ["mupdf"] },
 });
